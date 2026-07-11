@@ -101,6 +101,10 @@ def classify_dynamic(listing: dict, conn, thresholds: dict, mk1_beater: dict,
     exclude_id: udelader denne annonce fra sit eget historik-datasaet (bruges ved
     genberegning af allerede-gemte raekker, hvor annoncen selv allerede er i DB'en).
 
+    NB (scraper-boilerplate-migrering, 2026-07-12): sammenligner mod kolonnen
+    `item_key`, ikke `id` -- ren skema-navngivning der matcher scraper-core's
+    konvention, ingen aendring i selve klassifikationslogikken.
+
     Returnerer (klassifikation, metode)."""
     model = listing.get("model")
     gen = listing.get("gen", "uoplyst")
@@ -113,7 +117,7 @@ def classify_dynamic(listing: dict, conn, thresholds: dict, mk1_beater: dict,
     if exclude_id is not None:
         rows = conn.execute(
             "SELECT price_per_unit_dkk FROM listings "
-            "WHERE model = ? AND gen = ? AND price_per_unit_dkk IS NOT NULL AND first_seen >= ? AND id != ?",
+            "WHERE model = ? AND gen = ? AND price_per_unit_dkk IS NOT NULL AND first_seen >= ? AND item_key != ?",
             (model, gen, cutoff, exclude_id),
         ).fetchall()
     else:

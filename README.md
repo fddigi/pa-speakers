@@ -1,4 +1,21 @@
-# scraper-boilerplate
+# pa-speakers
+
+Overvåger brugte RCF ART (708-A/710-A/910-A/712/SUB705) og Yamaha DXR
+(8/10/12/15) PA-højttalere på tværs af Reverb, Thomann, Kleinanzeigen.de,
+Blocket.se og DBA.dk — deduperer lokalt, synces til Turso, vises i et
+sorterbart/filtrerbart dashboard bag login. Migreret fra det oprindelige,
+selvstændige `PA SPEAKERS`-projekt til
+[`fddigi/scraper-boilerplate`](https://github.com/fddigi/scraper-boilerplate)'s
+delta-sync-mønster — se `pa-speakers-migration-findings.md` for den fulde
+retrospektiv-log over hvad der virkede/ikke virkede under migreringen.
+
+Business-logikken (model/generation-udtræk, landed-cost-prisberegning, dynamisk
+percentil-klassifikation, Playwright-throttling/bot-wall-håndtering pr. kilde) er
+uændret fra originalen — kun persistens-laget er nyt.
+
+---
+
+## Om selve skabelonen (nedenfor er den generiske skabelon-dokumentation)
 
 Skabelon-repo (tænkt som GitHub "template repository") for mønsteret:
 

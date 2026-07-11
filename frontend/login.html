@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <title>Log ind</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+  <h1>Log ind</h1>
+  <form id="login-form">
+    <label>Brugernavn <input type="text" id="username" autocomplete="username" required /></label><br />
+    <label>Password <input type="password" id="password" autocomplete="current-password" required /></label><br />
+    <button type="submit">Log ind</button>
+  </form>
+  <p id="error" style="color: red"></p>
+
+  <script src="config.js"></script>
+  <script>
+    // No client-side password checks or shared API keys here - the Worker is the
+    // only place credentials are ever verified. This form just relays them once.
+    document.getElementById("login-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+      const errorEl = document.getElementById("error");
+      errorEl.textContent = "";
+
+      try {
+        const res = await fetch(`${API_BASE}/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include", // required to receive/store the session cookie
+          body: JSON.stringify({ username, password }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          errorEl.textContent = data.error || "Login mislykkedes.";
+          return;
+        }
+        window.location.href = "index.html";
+      } catch {
+        errorEl.textContent = "Kunne ikke kontakte serveren.";
+      }
+    });
+  </script>
+</body>
+</html>

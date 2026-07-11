@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: Python (ruff + tests + smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install scraper-core
+        run: pip install -e "packages/scraper-core[dev]"
+
+      - name: Install scraper (dummy example)
+        run: pip install -e "scraper[dev]"
+
+      - name: Ruff lint
+        run: ruff check packages/scraper-core scraper
+
+      - name: Unit tests (delta-sync logic, mocked Turso client)
+        run: pytest packages/scraper-core/tests -q
+
+      - name: Import smoke test
+        run: python -c "import scraper_core, scraper.main; print('import OK')"
+
+      - name: Local SQLite schema + scrape smoke test
+        # No TURSO_* credentials set here on purpose: this exercises the
+        # graceful local-only fallback (schema creation + dedup + outbox
+        # queueing) against a fresh local SQLite file, without needing a
+        # Turso account in CI.
+        run: |
+          rm -f data/ci-smoke.db
+          LOCAL_SQLITE_PATH=./data/ci-smoke.db python -m scraper.main
+
+  worker:
+    name: Worker (typecheck + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: npm ci
+
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit
+
+      - name: "Unit tests (auth: password hash + session token signing)"
+        run: npx vitest run
+
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <title>Data</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+  <h1>Scraped data</h1>
+  <p>Logget ind som <span id="whoami">...</span> (<button id="logout">log ud</button>)</p>
+  <table id="posts-table" border="1" cellpadding="4">
+    <thead>
+      <tr><th>id</th><th>user_id</th><th>title</th><th>scraped_at</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <p id="error" style="color: red"></p>
+
+  <script src="config.js"></script>
+  <script>
+    // Session lives in an HttpOnly cookie set by the Worker - this page never
+    // touches a password or API key, it just always sends credentials: 'include'.
+    async function requireSession() {
+      const res = await fetch(`${API_BASE}/api/me`, { credentials: "include" });
+      if (!res.ok) {
+        window.location.href = "login.html";
+        return null;
+      }
+      return res.json();
+    }
+
+    async function loadPosts() {
+      const res = await fetch(`${API_BASE}/api/posts`, { credentials: "include" });
+      if (!res.ok) {
+        document.getElementById("error").textContent = "Kunne ikke hente data.";
+        return;
+      }
+      const { posts } = await res.json();
+      const tbody = document.querySelector("#posts-table tbody");
+      tbody.innerHTML = "";
+      for (const post of posts) {
+        const row = document.createElement("tr");
+        for (const value of [post.item_key, post.user_id, post.title, post.scraped_at]) {
+          const cell = document.createElement("td");
+          cell.textContent = value; // textContent, not innerHTML - avoids XSS from scraped content
+          row.appendChild(cell);
+        }
+        tbody.appendChild(row);
+      }
+    }
+
+    document.getElementById("logout").addEventListener("click", async () => {
+      await fetch(`${API_BASE}/logout`, { method: "POST", credentials: "include" });
+      window.location.href = "login.html";
+    });
+
+    (async () => {
+      const me = await requireSession();
+      if (!me) return;
+      document.getElementById("whoami").textContent = me.username;
+      await loadPosts();
+    })();
+  </script>
+</body>
+</html>

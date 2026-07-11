@@ -1,0 +1,34 @@
+name: Deploy
+
+# Runs on every push to main. GitHub Pages (frontend/) is served directly from
+# the branch/path enabled once by infra/provision.sh (or bootstrap.yml) - it
+# updates automatically on every push, no separate Pages deploy step needed
+# here. This workflow only redeploys the Cloudflare Worker.
+#
+# Uses repo secrets CF_WORKER_NAME (written by provision.sh) and the
+# organization-level CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-worker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: npm ci
+
+      - name: Deploy Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --name "${{ secrets.CF_WORKER_NAME }}"

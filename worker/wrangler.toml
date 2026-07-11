@@ -2,7 +2,7 @@
 # Placeholder values only - never commit real secrets here. See infra/provision.sh
 # for how these get provisioned/filled in automatically for a new project.
 
-name = "REPLACE_WITH_PROJECT_NAME"  # convention: same slug as the GitHub repo name
+name = "pa-speakers"  # convention: same slug as the GitHub repo name
 main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
@@ -12,12 +12,12 @@ compatibility_flags = ["nodejs_compat"]
 # Then paste the returned "id" (and, for local dev, "preview_id") below.
 [[kv_namespaces]]
 binding = "RATE_LIMIT_KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "7eb3c61d87fe4f6e81b24b360dae4244"
 
 # --- Non-secret configuration (safe to commit) ---
 [vars]
 # CORS is locked to exactly this one origin - the project's GitHub Pages site.
-ALLOWED_ORIGIN = "https://REPLACE_WITH_GITHUB_USERNAME.github.io"
+ALLOWED_ORIGIN = "https://fddigi.github.io"
 # Session cookie lifetime in days (default 30). Purely cosmetic here; the real
 # value read by the code always comes from this var with a "30" fallback.
 SESSION_COOKIE_MAX_AGE_DAYS = "30"

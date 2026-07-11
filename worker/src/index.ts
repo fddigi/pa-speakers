@@ -87,72 +87,60 @@ app.get("/api/me", requireAuth, (c) => {
   return c.json({ username: session.sub, role: session.role });
 });
 
-// --- Data endpoints against the dummy `posts` table (matches
-// scraper/scraper/sources/jsonplaceholder.py). Both reads and writes sit behind
-// requireAuth - there is no unauthenticated API surface beyond /login and /. ---
+// --- Data endpoints against the `listings` table (matches
+// scraper/scraper/sources/*.py and worker/migrations/0001_init.sql). Migrated from
+// the PA SPEAKERS project's read-only dashboard.html - this is display-only, so
+// unlike the dummy `posts` example there is no POST /api/listings write endpoint:
+// the scraper writes exclusively via scraper-core's delta-sync outbox, and no
+// admin-panel manual-correction feature was requested for this project. ---
 
-app.get("/api/posts", requireAuth, async (c) => {
+app.get("/api/listings", requireAuth, async (c) => {
   const db = getDbClient(c.env);
-  const limit = Math.min(Number(c.req.query("limit") ?? "50") || 50, 200);
+  const limit = Math.min(Number(c.req.query("limit") ?? "500") || 500, 2000);
+
+  // Optional filters mirror dashboard.html's classification/model/source dropdowns.
+  const classification = c.req.query("classification");
+  const model = c.req.query("model");
+  const source = c.req.query("source");
+
+  const conditions: string[] = [];
+  const args: (string | number)[] = [];
+  if (classification) {
+    conditions.push("classification = ?");
+    args.push(classification);
+  }
+  if (model) {
+    conditions.push("model = ?");
+    args.push(model);
+  }
+  if (source) {
+    conditions.push("source = ?");
+    args.push(source);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  args.push(limit);
+
   const result = await db.execute({
-    sql: "SELECT item_key, post_id, user_id, title, body, scraped_at FROM posts ORDER BY post_id LIMIT ?",
-    args: [limit],
+    sql: `SELECT * FROM listings ${where} ORDER BY first_seen DESC LIMIT ?`,
+    args,
   });
-  return c.json({ posts: result.rows });
+  return c.json({ listings: result.rows });
 });
 
-app.get("/api/posts/:itemKey", requireAuth, async (c) => {
+app.get("/api/listings/:itemKey", requireAuth, async (c) => {
   const db = getDbClient(c.env);
   const itemKey = c.req.param("itemKey");
   if (!itemKey) {
     return c.json({ error: "itemKey is required" }, 400);
   }
   const result = await db.execute({
-    sql: "SELECT item_key, post_id, user_id, title, body, scraped_at FROM posts WHERE item_key = ?",
+    sql: "SELECT * FROM listings WHERE item_key = ?",
     args: [itemKey],
   });
   if (result.rows.length === 0) {
     return c.json({ error: "not found" }, 404);
   }
-  return c.json({ post: result.rows[0] });
-});
-
-// Write endpoint - demonstrates the "writes behind auth" half of the pattern.
-// The scraper itself writes via scraper-core's delta-sync outbox, not this API;
-// this exists for e.g. a future admin panel doing manual corrections.
-app.post("/api/posts", requireAuth, async (c) => {
-  type PostBody = {
-    item_key?: string;
-    post_id?: number;
-    user_id?: number;
-    title?: string;
-    body?: string;
-  };
-  let body: PostBody;
-  try {
-    body = await c.req.json<PostBody>();
-  } catch {
-    body = {};
-  }
-
-  if (!body.item_key || !body.title) {
-    return c.json({ error: "item_key and title are required" }, 400);
-  }
-
-  const db = getDbClient(c.env);
-  await db.execute({
-    sql: `INSERT INTO posts (item_key, post_id, user_id, title, body, scraped_at)
-          VALUES (?, ?, ?, ?, ?, datetime('now'))
-          ON CONFLICT(item_key) DO UPDATE SET
-            post_id = excluded.post_id,
-            user_id = excluded.user_id,
-            title = excluded.title,
-            body = excluded.body,
-            scraped_at = excluded.scraped_at`,
-    args: [body.item_key, body.post_id ?? 0, body.user_id ?? 0, body.title, body.body ?? ""],
-  });
-
-  return c.json({ ok: true });
+  return c.json({ listing: result.rows[0] });
 });
 
 export default app;

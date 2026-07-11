@@ -3,11 +3,17 @@
 #
 # WHAT THIS DOES, IN ORDER:
 #   1. Creates one Turso database named after this repo (skips if it already
-#      exists) and mints a scoped db-auth-token, via infra/lib/turso.sh.
-#   2. Deploys the Cloudflare Worker (wrangler deploy) and sets its
-#      TURSO_DATABASE_URL / TURSO_AUTH_TOKEN / SESSION_HMAC_SECRET secrets via
-#      `wrangler secret put` (ADMIN_USER/ADMIN_PW_HASH are set separately by
-#      ./infra/add-user.sh, not here).
+#      exists), mints a scoped db-auth-token, and applies
+#      worker/migrations/0001_init.sql against it via `turso db shell`
+#      (idempotent - the migration itself is CREATE TABLE IF NOT EXISTS).
+#   2. Fills in worker/wrangler.toml's placeholders (project name, CORS
+#      ALLOWED_ORIGIN computed from the GitHub Pages URL, and a KV namespace
+#      created via `wrangler kv namespace create` if one doesn't already exist),
+#      deploys the Cloudflare Worker, sets its TURSO_DATABASE_URL /
+#      TURSO_AUTH_TOKEN / SESSION_HMAC_SECRET secrets via `wrangler secret put`
+#      (ADMIN_USER/ADMIN_PW_HASH are set separately by ./infra/add-user.sh, not
+#      here), and fills in frontend/config.js's API_BASE with the deployed
+#      Worker's real workers.dev URL.
 #   3. Enables GitHub Pages for this repo (serving frontend/) via the GitHub API.
 #   4. OPTIONAL: if HEALTHCHECKS_API_KEY is set, creates a per-project
 #      healthchecks.io check via infra/lib/healthchecks.sh and captures its
@@ -16,6 +22,12 @@
 #   5. Writes the generated non-secret identifiers back as GitHub repo secrets
 #      via `gh secret set`, so deploy.yml can find the right Worker/db on every
 #      push to main.
+#   6. Commits and pushes the filled-in wrangler.toml/config.js back to `main`
+#      (requires `contents: write` - see bootstrap.yml) - otherwise these
+#      generated values only exist on the ephemeral Actions runner and are lost
+#      the moment the workflow ends. Best-effort: a push failure (e.g. running
+#      this locally without push access) logs a warning, not a hard error, since
+#      the actual cloud resources are already provisioned by this point.
 #
 # REQUIRED ENV (set as org-level GitHub secrets when run from bootstrap.yml, or
 # in your own shell when run manually):
@@ -70,6 +82,7 @@ main() {
   provision_pages
   provision_healthcheck
   write_repo_secrets
+  commit_generated_config
 
   log_step "Provisioning complete for '${PROJECT_NAME}'"
   if [[ -n "$HEALTHCHECK_URL" ]]; then
@@ -91,12 +104,59 @@ provision_turso_database() {
   TURSO_DATABASE_URL="libsql://${hostname}"
   TURSO_AUTH_TOKEN="$(turso_create_db_token "$PROJECT_NAME")"
   log_info "Turso database URL: ${TURSO_DATABASE_URL}"
+
+  local migration_file="${REPO_ROOT}/worker/migrations/0001_init.sql"
+  if [[ -f "$migration_file" ]]; then
+    log_info "Applying ${migration_file} to '${PROJECT_NAME}' via Turso's HTTP pipeline API..."
+    local migration_response
+    migration_response="$(turso_execute_sql_file "$hostname" "$TURSO_AUTH_TOKEN" "$migration_file")"
+    if echo "$migration_response" | jq -e '.results[]? | select(.type == "error")' >/dev/null 2>&1; then
+      log_warn "Migration may have failed - full response: ${migration_response}"
+    fi
+  else
+    log_warn "No worker/migrations/0001_init.sql found - skipping schema migration."
+  fi
 }
 
 provision_worker() {
   log_step "2/5 Cloudflare Worker"
+  local wrangler_toml="${REPO_ROOT}/worker/wrangler.toml"
+  local config_js="${REPO_ROOT}/frontend/config.js"
+  local repo_full_name owner allowed_origin
+
+  repo_full_name="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+  owner="${repo_full_name%%/*}"
+  # Portable lowercase (not ${owner,,} - that's bash 4+, macOS ships bash 3.2).
+  owner="$(echo "$owner" | tr '[:upper:]' '[:lower:]')"
+  allowed_origin="https://${owner}.github.io"
+
+  log_info "Filling in wrangler.toml placeholders (name, ALLOWED_ORIGIN)..."
+  sed -i.bak \
+    -e "s|REPLACE_WITH_PROJECT_NAME|${PROJECT_NAME}|" \
+    -e "s|https://REPLACE_WITH_GITHUB_USERNAME.github.io|${allowed_origin}|" \
+    "$wrangler_toml"
+  rm -f "${wrangler_toml}.bak"
+
+  log_info "Ensuring KV namespace for RATE_LIMIT_KV exists..."
+  local kv_title="${PROJECT_NAME}-RATE_LIMIT_KV" kv_id
+  kv_id="$(wrangler kv namespace list 2>/dev/null | jq -r --arg title "$kv_title" '.[] | select(.title == $title) | .id' | head -n1)"
+  if [[ -z "$kv_id" ]]; then
+    log_info "No existing KV namespace named '${kv_title}' - creating one..."
+    kv_id="$(cd "${REPO_ROOT}/worker" && wrangler kv namespace create RATE_LIMIT_KV 2>&1 \
+      | grep -oE 'id = "[a-f0-9]+"' | head -n1 | grep -oE '[a-f0-9]+')"
+  else
+    log_info "Found existing KV namespace '${kv_title}' (id=${kv_id}) - reusing (idempotent)."
+  fi
+  if [[ -z "$kv_id" ]]; then
+    log_warn "Could not determine KV namespace id automatically - wrangler deploy will likely fail." \
+      "Check manually with: wrangler kv namespace list"
+  else
+    sed -i.bak -e "s|REPLACE_WITH_KV_NAMESPACE_ID|${kv_id}|" "$wrangler_toml"
+    rm -f "${wrangler_toml}.bak"
+  fi
+
   log_info "Deploying Worker '${PROJECT_NAME}' via wrangler..."
-  (cd "${REPO_ROOT}/worker" && wrangler deploy --name "$PROJECT_NAME")
+  (cd "${REPO_ROOT}/worker" && wrangler deploy)
 
   log_info "Setting Worker secrets (idempotent - wrangler secret put overwrites in place)..."
   wrangler_secret_put "TURSO_DATABASE_URL" "$TURSO_DATABASE_URL" "${REPO_ROOT}/worker" "$PROJECT_NAME"
@@ -109,6 +169,22 @@ provision_worker() {
   wrangler_secret_put "SESSION_HMAC_SECRET" "$session_secret" "${REPO_ROOT}/worker" "$PROJECT_NAME"
 
   log_info "ADMIN_USER / ADMIN_PW_HASH are set separately: run ./infra/add-user.sh next."
+
+  log_info "Filling in frontend/config.js's API_BASE with the deployed Worker URL..."
+  local subdomain worker_url
+  subdomain="$(curl -sS "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/subdomain" \
+    -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" | jq -r '.result.subdomain // empty')"
+  if [[ -n "$subdomain" ]]; then
+    worker_url="https://${PROJECT_NAME}.${subdomain}.workers.dev"
+    sed -i.bak \
+      -e "s|https://REPLACE_WITH_WORKER_SUBDOMAIN.workers.dev|${worker_url}|" \
+      "$config_js"
+    rm -f "${config_js}.bak"
+    log_info "frontend/config.js API_BASE set to: ${worker_url}"
+  else
+    log_warn "Could not determine the account's workers.dev subdomain - frontend/config.js still has a placeholder." \
+      "Fill in API_BASE manually (see README step 7)."
+  fi
 }
 
 provision_pages() {
@@ -151,6 +227,24 @@ write_repo_secrets() {
     gh_secret_set "HEALTHCHECK_URL" "$HEALTHCHECK_URL"
   fi
   log_info "TURSO_AUTH_TOKEN / SESSION_HMAC_SECRET stay Worker-only secrets, not duplicated as repo secrets."
+}
+
+commit_generated_config() {
+  log_step "Committing generated wrangler.toml/config.js back to main"
+  (
+    cd "$REPO_ROOT"
+    git config user.name "scraper-boilerplate-bot" 2>/dev/null || true
+    git config user.email "actions@users.noreply.github.com" 2>/dev/null || true
+    git add worker/wrangler.toml frontend/config.js
+    if git diff --cached --quiet; then
+      log_info "No generated-config changes to commit (already up to date)."
+    elif git commit -m "provision.sh: fill in generated Worker/Pages config" >/dev/null && git push; then
+      log_info "Pushed generated wrangler.toml/config.js to main."
+    else
+      log_warn "Could not commit/push generated config - do it manually:" \
+        "git add worker/wrangler.toml frontend/config.js && git commit -m 'fill in config' && git push"
+    fi
+  ) || log_warn "commit_generated_config failed - the cloud resources above are still provisioned correctly."
 }
 
 main "$@"

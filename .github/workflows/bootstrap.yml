@@ -33,7 +33,7 @@ jobs:
   bootstrap:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write  # provision.sh commits generated wrangler.toml/config.js back to main
     steps:
       - uses: actions/checkout@v4
 

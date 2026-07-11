@@ -1,0 +1,162 @@
+# Konfiguration for RCF ART PA-overvågning
+# Se pa-monitor-claude-code-prompt_1.md for den fulde opgavebeskrivelse.
+
+sources:
+  kleinanzeigen: true
+  blocket: true
+  reverb: true
+  thomann: true
+  dba: true
+
+search_terms:
+  primary:
+    - "RCF ART 910"
+    - "RCF ART 710"
+    - "RCF ART 708"
+  secondary:
+    - "RCF SUB 705"
+    - "RCF ART 712"
+    # Yamaha DXR-serien: konkurrerende 2-vejs powered hoejttalere til RCF ART.
+    # Ingen statiske pris-taerskler endnu (se classify.py/config nedenfor) --
+    # klassificeres dynamisk (25./75. percentil) naar der er nok historik,
+    # ellers UKENDT, samme moenster som RCF SUB 705/ART 712.
+    - "Yamaha DXR8"
+    - "Yamaha DXR10"
+    - "Yamaha DXR12"
+    - "Yamaha DXR15"
+
+# Thomann B-Stock: per-model produkt-URL'er 404'er naar der ikke er B-Stock paa lager
+# (bekraeftet ved research 2026-07-07), saa de er IKKE en stabil pollemaal. I stedet
+# polles den samlede RCF-kategoriside, som altid findes og lister B-Stock-varianter
+# naar de er paa lager. Se sources/thomann.py.
+thomann_category_url: "https://www.thomann.dk/rcf_aktive_fullrange_hoejttalere.html"
+
+# F3 (BACKLOG.md): Reverb er domineret af amerikanske forhandlere der saelger nyt/
+# open-box til naesten-nypris -- det oversvoemmer boardet med FAIR/OVERPRISET og
+# forurener percentilerne i den dynamiske klassifikation. condition filtrerer vaek
+# fabriksnyt ved kilden (API-parameter, verificeret 2026-07-08: 170 -> 24 raa
+# annoncer). exclude_origin_countries dropper annoncer med INFERRED oprindelse i
+# disse lande -- testet tom pr. 2026-07-08: Reverb havde 0 bekraeftede EU-brugte
+# annoncer for vores modeller den dag (kun US+ukendt), saa US-udelukkelse ville
+# have reduceret Reverb til 3 annoncer. Landed cost (fragt+told+moms) laegges
+# allerede korrekt oveni US-priser, og dynamisk percentil-klassifikation haandterer
+# resten -- saa US beholdes. Saet fx ["US"] her hvis det senere viser sig noedvendigt.
+reverb:
+  condition: "used"
+  exclude_origin_countries: []
+
+currency:
+  eur_dkk: 7.46
+  sek_dkk: 0.70
+  usd_dkk: 6.90
+
+# Import-omkostninger for annoncer fra saelgere UDENFOR EU/EOES (primaert Reverb-
+# saelgere i USA/UK). Bruges til at beregne en "landed cost" (reel slutpris i DKK)
+# saa priser kan sammenlignes retfaerdigt paa tvaers af graenser. Se
+# sources/reverb.py: Reverbs API opgiver typisk KUN indenlandsk USA-fragt (US_CON) --
+# international fragt til DK er "beregnes individuelt", saa vi bruger et estimat.
+# ADVARSEL: duty_pct er et estimat for hoejttalere (HS-kode 8518) -- jeg kunne IKKE
+# bekraefte den praecise EU TARIC-sats ved research. Tjek toldst.dk eller EU's TARIC-
+# database foer du stoler paa dette til en koebsbeslutning.
+import_costs:
+  vat_pct: 25                      # dansk moms, gaelder ALT fra ikke-EU uanset vaerdi
+  duty_threshold_eur: 150          # under denne vaerdi (vare, ekskl. fragt): ingen told
+  duty_pct: 4.5                    # ESTIMAT for hoejttalere -- IKKE bekraeftet praecist
+  default_shipping_dkk: 800        # bruges naar Reverb ikke opgiver en international fragtpris
+  eu_country_codes:                # saelgere fra disse lande: ingen told/import-moms
+    - DK
+    - DE
+    - SE
+    - AT
+    - BE
+    - BG
+    - HR
+    - CY
+    - CZ
+    - EE
+    - ES
+    - FI
+    - FR
+    - GR
+    - HU
+    - IE
+    - IT
+    - LT
+    - LU
+    - LV
+    - MT
+    - NL
+    - PL
+    - PT
+    - RO
+    - SI
+    - SK
+
+# Pris-tærskler i DKK, par-priser. Enkeltenhed halveres + 10% i classify.py.
+thresholds:
+  708a_mk4:
+    godt_koeb_max: 2800
+    fair_min: 3000
+    fair_max: 3800
+    overpriced_min: 4200
+  708a_mk5:
+    godt_koeb_max: 3800
+    fair_min: 3800
+    fair_max: 4800
+    overpriced_min: 5200
+  710a_mk2_mk3:
+    godt_koeb_max: 3000
+    fair_min: 3000
+    fair_max: 4000
+    overpriced_min: 4500
+  710a_mk4:
+    godt_koeb_max: 3800
+    fair_min: 3800
+    fair_max: 4800
+    overpriced_min: 5500
+  710a_mk5:
+    godt_koeb_max: 4800
+    fair_min: 4800
+    fair_max: 6000
+    overpriced_min: 6500
+  910a:
+    godt_koeb_max: 6500
+    fair_min: 6500
+    fair_max: 7500
+    overpriced_min: 8000
+
+# 710-A MK1 er en beater-model: kun GODT KØB under denne pargrænse, ellers OVERPRISET.
+mk1_beater:
+  godt_koeb_max: 2500
+
+# Prioritetsrækkefølge ved sortering af flere samtidige hits (lavere tal = højere prioritet)
+priority_order:
+  - key: "910a"
+    max_price: 6500
+  - key: "710a_mk4"
+    max_price: 3800
+  - key: "710a_mk3"
+    max_price: 3500
+  - key: "708a"
+    max_price: null
+
+playwright:
+  # true = ingen synlige Chrome-vinduer. Playwright 1.61+ bruger automatisk
+  # Chromiums nye ("headless=new") tilstand ved headless=true, som er markant
+  # sværere at fingeraftrykke/opdage end den gamle headless-tilstand -- saa
+  # dette bor ikke oege blokeringsrisikoen naevnevaerdigt. Sat til true efter
+  # klage over popping Chrome-vinduer paa homelab-maskinen.
+  headless: true
+  min_delay_s: 3
+  max_delay_s: 8
+  # F1 (BACKLOG.md): max_pages_per_run var et samlet budget paa tvaers af ALLE
+  # soegetermer, saa vi reelt kun hentede side 1 pr. term. Nu pr.-term + et separat
+  # samlet loft som noedbremse.
+  max_pages_per_term: 3
+  max_pages_total: 20
+
+# Genbruges af sources/thomann.py's egen separate sqlite3-forbindelse (B-Stock
+# lagerstatus-tabel) -- peger bevidst paa SAMME fil som .env's LOCAL_SQLITE_PATH
+# (scraper_core.LocalStore), saa der kun er ét lokalt datafil, ikke to spredte.
+# log_path er ikke brugt her -- logging_setup.py (scraper_core) styrer logging.
+db_path: "./data/local.db"

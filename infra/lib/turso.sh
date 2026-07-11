@@ -62,3 +62,34 @@ turso_delete_database() {
   log_info "Deleting Turso database '${db_name}'..."
   turso_api DELETE "/v1/organizations/${TURSO_ORG}/databases/${db_name}"
 }
+
+turso_execute_sql_file() {
+  # turso_execute_sql_file <hostname> <db-auth-token> <sql-file>
+  # Applies a .sql file against a Turso database via the database's OWN
+  # libsql HTTP pipeline endpoint (https://<hostname>/v2/pipeline), using the
+  # database-scoped token (TURSO_AUTH_TOKEN from turso_create_db_token) - NOT
+  # the `turso` CLI, which needs an interactively browser-authenticated local
+  # session and is unsuited to CI. This is the same wire protocol
+  # worker/src/db.ts and scraper_core/turso_client.py's libsql-client SDKs
+  # speak - here it's called directly because provision.sh runs in bash, not
+  # a language with a libsql SDK available.
+  #
+  # LIMITATION: splits on `;` after stripping `--` line-comments. Does not
+  # handle semicolons inside string literals. Fine for the template's own
+  # straightforward CREATE TABLE-style migration; revisit with a real SQL
+  # parser (or a Python/Node one-off using the official SDK) if project
+  # migrations grow more complex than that.
+  local hostname="$1" auth_token="$2" sql_file="$3"
+  local body
+  body="$(
+    grep -v '^[[:space:]]*--' "$sql_file" \
+      | tr '\n' ' ' \
+      | sed 's/;/;\n/g' \
+      | sed '/^[[:space:]]*$/d' \
+      | jq -R -s -c 'split("\n") | map(select(length > 0)) | {requests: (map({type: "execute", stmt: {sql: .}}) + [{type: "close"}])}'
+  )"
+  curl -sS -X POST "https://${hostname}/v2/pipeline" \
+    -H "Authorization: Bearer ${auth_token}" \
+    -H "Content-Type: application/json" \
+    -d "$body"
+}

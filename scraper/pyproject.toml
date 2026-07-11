@@ -3,12 +3,16 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "scraper-dummy-example"
+name = "pa-speakers-scraper"
 version = "0.1.0"
-description = "Example scraper project built on scraper-core. Replace scraper/sources/jsonplaceholder.py with your own project-specific source."
+description = "Monitors used RCF ART / Yamaha DXR PA speaker listings across Reverb, Thomann, Kleinanzeigen, Blocket, and DBA. Migrated from the standalone PA SPEAKERS project onto scraper-boilerplate."
 requires-python = ">=3.11"
 dependencies = [
     "scraper-core>=0.1.0",
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "playwright>=1.44",
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]

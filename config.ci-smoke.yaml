@@ -1,0 +1,12 @@
+# CI-only fixture: ALL sources disabled. Used by .github/workflows/ci.yml's smoke
+# test (via RCF_CONFIG_PATH) so the plumbing (settings, LocalStore, schema
+# creation, graceful local-only fallback) gets exercised on every push/PR without
+# ever hitting the five real, live, rate-limited/bot-protected marketplaces this
+# project actually scrapes. See migration-findings.md, "Fund 6" for why the
+# original dummy-example CI pattern (hit the real source directly) isn't safe here.
+sources:
+  kleinanzeigen: false
+  blocket: false
+  reverb: false
+  thomann: false
+  dba: false

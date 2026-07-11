@@ -19,7 +19,7 @@ jobs:
       - name: Install scraper-core
         run: pip install -e "packages/scraper-core[dev]"
 
-      - name: Install scraper (dummy example)
+      - name: Install scraper (RCF ART / Yamaha DXR PA-speaker monitor)
         run: pip install -e "scraper[dev]"
 
       - name: Ruff lint
@@ -31,14 +31,17 @@ jobs:
       - name: Import smoke test
         run: python -c "import scraper_core, scraper.main; print('import OK')"
 
-      - name: Local SQLite schema + scrape smoke test
+      - name: Local SQLite schema + plumbing smoke test
         # No TURSO_* credentials set here on purpose: this exercises the
-        # graceful local-only fallback (schema creation + dedup + outbox
-        # queueing) against a fresh local SQLite file, without needing a
-        # Turso account in CI.
+        # graceful local-only fallback (settings, LocalStore, schema creation)
+        # without needing a Turso account in CI. RCF_CONFIG_PATH points at a
+        # fixture with all five sources disabled - this project's real sources
+        # are live, rate-limited/bot-protected commercial marketplaces (Reverb,
+        # Thomann, Kleinanzeigen, Blocket, DBA), not a stable public test API
+        # like the original dummy example, so CI must never hit them directly.
         run: |
           rm -f data/ci-smoke.db
-          LOCAL_SQLITE_PATH=./data/ci-smoke.db python -m scraper.main
+          LOCAL_SQLITE_PATH=./data/ci-smoke.db RCF_CONFIG_PATH=./config.ci-smoke.yaml python -m scraper.main
 
   worker:
     name: Worker (typecheck + tests)

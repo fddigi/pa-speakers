@@ -71,6 +71,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # gitleaks/gitleaks-action@v2 now requires a paid GITLEAKS_LICENSE for
+      # organization accounts (this repo is under the fddigi org) - it failed
+      # on every push (confirmed: 10+ consecutive CI runs, "License key is
+      # required"). The underlying gitleaks CLI itself is still free/open
+      # source - only the Action wrapper added the paywall - so this installs
+      # and runs the CLI directly instead of the wrapper.
+      - name: Install gitleaks
+        run: |
+          LATEST_TAG=$(curl -sSL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name"' | cut -d '"' -f4)
+          VERSION="${LATEST_TAG#v}"
+          curl -sSL -o gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/${LATEST_TAG}/gitleaks_${VERSION}_linux_x64.tar.gz"
+          tar xzf gitleaks.tar.gz gitleaks
+          chmod +x gitleaks
+      - name: Run gitleaks
+        run: ./gitleaks detect --source . --verbose --redact

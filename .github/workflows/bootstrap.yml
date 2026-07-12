@@ -39,11 +39,16 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install wrangler + jq
         run: |
           npm install -g wrangler@4.110.0  # pinned: unpinned wrangler drifted CLI output format mid-migration
+          # NB: wrangler@4.110.0 requires Node >=22 (its own package.json engines
+          # field) - if this pin is ever bumped, check whether node-version above
+          # needs bumping too. Found 2026-07-12: Node 20 + this pin caused wrangler
+          # to fail near-instantly (no network call reached) on every wrangler
+          # invocation, not just the one being fixed at the time.
           sudo apt-get update -y
           sudo apt-get install -y jq
 

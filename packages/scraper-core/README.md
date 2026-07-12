@@ -19,6 +19,20 @@ Delt Python-bibliotek for mønsteret: hent data -> dedup lokalt i SQLite -> delt
 - `scraper_core.sync` — selve delta-sync-logikken (kun nye/ændrede rækker sendes).
 - `scraper_core.healthcheck` — no-op-safe ping til healthchecks.io.
 - `scraper_core.logging_setup` — struktureret logging via `rich`.
+- `scraper_core.matching` — `normalize_model_number()` (glued generation-suffixes
+  som "710A-MK5"/"DXR8MKII") og `build_synonym_lookup()`/`expand_synonyms()`
+  (fritekst på tværs af sprog, fx "jakke"/"jacka"/"kurtka"). Se SCRAPING_LESSONS.md.
+- `scraper_core.pricing` — `parse_price()`, tvinger `unit=`"major"/"minor"` eksplicit
+  ved hvert kald, så en glemt øre-/cent-omregning bliver en kald-tids-fejl i stedet
+  for en stille 100×-fejl i produktionsdata.
+- `scraper_core.detail_cache` — `DetailFetchCache`, **opt-in, ikke default**. Erstatter
+  et boolean "fetched"-flag med felt-niveau-tracking, så en senere udvidelse af et
+  to-fase-scrapers detalje-kontrakt opdages automatisk pr. række i stedet for at
+  kræve en manuel cache-nulstilling. Brug kun hvis din detalje-kontrakt allerede har
+  ændret sig mindst én gang, eller forventes at gøre det — for en stabil kontrakt er
+  det simple boolean-mønster i `local_db.upsert_if_changed()` billigere at forstå.
+- `scraper_core.watchdog` — `run_with_timeout()`, giver én kilde en wall-clock-budget
+  i en multi-kilde-pipeline, så én hængende kilde ikke blokerer resten af kørslen.
 
 ## Installation (lokalt, i editable mode)
 

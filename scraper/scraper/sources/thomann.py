@@ -18,6 +18,8 @@ import sqlite3
 
 import requests
 from bs4 import BeautifulSoup
+from scraper_core.matching import normalize_model_number
+from scraper_core.pricing import parse_price
 
 logger = logging.getLogger("pa_monitor.thomann")
 
@@ -56,11 +58,18 @@ def _save_state(conn: sqlite3.Connection, url: str, in_stock: bool, price_dkk, d
 
 
 def _matches_target_models(title: str, search_terms: list) -> bool:
-    title_lower = title.lower()
+    # Normaliserer BEGGE sider (title og search-term) foer substring-tjekket, saa
+    # glued generation-suffixes (fx "ART-910A ... ART910A" i en rigtig titel fra
+    # vores egen database) ikke skjuler et reelt match. Fundet 2026-07-12: raa
+    # substring-sammenligning fejlede paa netop den slags titler, fordi
+    # search-termets bogstavelige mellemrum ("art 910") ikke fandtes i titlen,
+    # selvom modellen tydeligt er den samme. Se scraper_core.matching.
+    normalized_title = normalize_model_number(title)
     for term in search_terms:
-        # "RCF ART 910" -> "art 910"
-        bare = term.lower().replace("rcf", "").strip()
-        if bare in title_lower:
+        # "RCF ART 910" -> "ART 910"
+        bare = term.upper().replace("RCF", "").strip()
+        normalized_term = normalize_model_number(bare)
+        if normalized_term in normalized_title:
             return True
     return False
 
@@ -98,10 +107,11 @@ def _fetch_price_dkk(session: requests.Session, url: str):
     m = re.search(r"([\d.]+)\s*kr", price_el.get_text())
     if not m:
         return None
-    try:
-        return float(m.group(1).replace(".", ""))
-    except ValueError:
-        return None
+    # decimal_style FORCED to "comma" (never "auto") - same reasoning as
+    # kleinanzeigen.py: Danish formatting has no reliable signal to distinguish
+    # a thousands-only dot ("1.234" == 1234 kr) from a decimal dot ("47.26"),
+    # and "auto" would misread the former as 1.234 kr.
+    return parse_price(m.group(1), unit="major", decimal_style="comma")
 
 
 def fetch(config: dict, dry_run: bool = False) -> list[dict]:

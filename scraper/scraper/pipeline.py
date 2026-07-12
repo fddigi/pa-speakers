@@ -12,6 +12,7 @@ import json
 import logging
 
 from scraper_core.local_db import LocalStore
+from scraper_core.watchdog import SourceTimeoutError, run_with_timeout
 
 from . import classify, normalize
 
@@ -71,19 +72,44 @@ def make_item_key(source: str, url: str | None, title: str | None = None, price_
     return hashlib.sha256(basis.encode("utf-8")).hexdigest()[:32]
 
 
-def run_source(store: LocalStore, source_name: str, fetch_fn, config: dict, dry_run: bool = False) -> tuple[int, int]:
+def run_source(
+    store: LocalStore,
+    source_name: str,
+    fetch_fn,
+    config: dict,
+    dry_run: bool = False,
+    fetch_timeout_seconds: float = 300,
+) -> tuple[int, int]:
     """Runs one source's fetch() -> normalize -> classify -> upsert_if_changed.
 
     Isolated try/except per source, matching the original monitor.py: one source's
     failure must never crash the others or the rest of the run. Returns
     (raw_count, changed_count).
+
+    fetch_fn() itself already gets bounded per-request timeouts (Playwright
+    page.goto/wait_for_selector, requests' own timeout=) - fetch_timeout_seconds
+    is a wall-clock BACKSTOP on top of those, for the whole fetch() call across
+    all its search terms/pages, via scraper_core.watchdog.run_with_timeout().
+    NOTE (see SCRAPING_LESSONS.md / scraper-core's own watchdog.py docstring):
+    this only bounds how long THIS FUNCTION waits - it cannot forcibly kill a
+    truly stuck fetch_fn() (confirmed: CPython's ThreadPoolExecutor registers
+    an atexit hook that still joins the abandoned thread at interpreter exit,
+    so a genuinely infinite hang - a blocked call with no timeout of its own -
+    will still prevent the whole process from exiting, same as before this
+    was added). It DOES bound a source that is merely slow-but-finite (e.g.
+    stuck in retries for several minutes), so it can't delay the sources that
+    run after it in the same sequential loop.
     """
     store.executescript(LOCAL_SCHEMA)
     raw_count = 0
     changed = 0
 
     try:
-        raw_listings = fetch_fn(config, dry_run=dry_run)
+        raw_listings = run_with_timeout(
+            lambda: fetch_fn(config, dry_run=dry_run),
+            timeout_seconds=fetch_timeout_seconds,
+            source_name=source_name,
+        )
         raw_count = len(raw_listings)
         rates = config["currency"]
 
@@ -159,6 +185,11 @@ def run_source(store: LocalStore, source_name: str, fetch_fn, config: dict, dry_
             changed += 1
 
         logger.info("%s: %d raw, %d new/changed", source_name, raw_count, changed)
+    except SourceTimeoutError:
+        # Already logged by run_with_timeout() itself (logger.warning) - avoid a
+        # duplicate/misleading logger.exception() stack trace pointing at the
+        # watchdog's own raise site instead of the actual stuck fetch_fn() call.
+        pass
     except Exception:
         logger.exception("%s: source failed, skipping - other sources unaffected", source_name)
 

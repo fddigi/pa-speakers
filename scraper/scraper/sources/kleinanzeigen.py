@@ -9,6 +9,8 @@ import re
 import time
 from urllib.parse import quote
 
+from scraper_core.pricing import parse_price
+
 logger = logging.getLogger("pa_monitor.kleinanzeigen")
 
 BASE_URL = "https://www.kleinanzeigen.de"
@@ -35,11 +37,13 @@ def _parse_price(price_text: str):
     m = re.search(r"([\d.,]+)\s*€", price_text or "")
     if not m:
         return None, "EUR"
-    amount_str = m.group(1).replace(".", "").replace(",", ".")
-    try:
-        return float(amount_str), "EUR"
-    except ValueError:
-        return None, "EUR"
+    # decimal_style FORCED to "comma" (never "auto"): German formatting has no
+    # reliable self-disambiguating signal for a thousands-only dot ("1.234" ==
+    # 1234) vs. a decimal dot ("47.26" == 47.26) - "auto" guesses the latter
+    # whenever there's a dot and no comma, which would silently turn e.g.
+    # "1.234 €" into 1.234 EUR instead of 1234 EUR. Kleinanzeigen always uses
+    # dot-as-thousands/comma-as-decimal, so this must be forced explicitly.
+    return parse_price(m.group(1), unit="major", decimal_style="comma"), "EUR"
 
 
 def _parse_listing_cards(page):

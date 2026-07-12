@@ -21,7 +21,11 @@ PLIST_TEMPLATE := infra/launchd/scraper.template.plist
 PLIST_DEST     := $(HOME)/Library/LaunchAgents/$(LAUNCHD_LABEL).plist
 LOG_DIR        := $(CURDIR)/data/logs
 
-.PHONY: venv test lint install-launchd uninstall-launchd
+WATCHER_LABEL         ?= com.$(PROJECT_NAME).trigger-watcher
+WATCHER_PLIST_TEMPLATE := infra/launchd/watcher.template.plist
+WATCHER_PLIST_DEST     := $(HOME)/Library/LaunchAgents/$(WATCHER_LABEL).plist
+
+.PHONY: venv test lint install-launchd uninstall-launchd install-launchd-watcher uninstall-launchd-watcher
 
 venv:
 	python3.11 -m venv $(PYTHON_VENV)
@@ -67,3 +71,34 @@ uninstall-launchd:
 	-launchctl unload "$(PLIST_DEST)" 2>/dev/null
 	rm -f "$(PLIST_DEST)"
 	@echo "Removed $(PLIST_DEST)"
+
+# Installs the SEPARATE, always-running "Kør nu" watcher (scraper/scraper/
+# trigger_watcher.py) - polls Turso's control row for the webapp's run-now
+# trigger and starts a scraper run on demand. Runs ALONGSIDE the hourly
+# install-launchd job, not instead of it (main.py's own advisory file lock
+# stops the two from ever racing on the same local SQLite file if they
+# happen to overlap). Requires Turso to be configured (see .env) - there is
+# no "Kør nu" flag to poll without it.
+install-launchd-watcher:
+	@if [ ! -x "$(PYTHON_BIN)" ]; then \
+		echo "error: $(PYTHON_BIN) not found - run 'make venv' first."; \
+		exit 1; \
+	fi
+	@mkdir -p "$(LOG_DIR)"
+	@mkdir -p "$(HOME)/Library/LaunchAgents"
+	@content="$$(cat "$(WATCHER_PLIST_TEMPLATE)")"; \
+	content="$${content//__LABEL__/$(WATCHER_LABEL)}"; \
+	content="$${content//__PYTHON_BIN__/$(PYTHON_BIN)}"; \
+	content="$${content//__WORKING_DIR__/$(CURDIR)}"; \
+	content="$${content//__LOG_DIR__/$(LOG_DIR)}"; \
+	printf '%s\n' "$$content" > "$(WATCHER_PLIST_DEST)"
+	@echo "Wrote $(WATCHER_PLIST_DEST)"
+	-launchctl unload "$(WATCHER_PLIST_DEST)" 2>/dev/null
+	launchctl load "$(WATCHER_PLIST_DEST)"
+	@echo "Loaded launchd job '$(WATCHER_LABEL)' - polls for the webapp's 'Kør nu' button continuously."
+	@echo "Logs: $(LOG_DIR)/trigger-watcher.out.log / trigger-watcher.err.log"
+
+uninstall-launchd-watcher:
+	-launchctl unload "$(WATCHER_PLIST_DEST)" 2>/dev/null
+	rm -f "$(WATCHER_PLIST_DEST)"
+	@echo "Removed $(WATCHER_PLIST_DEST)"

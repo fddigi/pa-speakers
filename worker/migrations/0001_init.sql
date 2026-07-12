@@ -52,3 +52,16 @@ CREATE TABLE IF NOT EXISTS search_terms (
     enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL
 );
+
+-- "Kør nu"-kontrol (single-row), inspireret af PLAGG's webapp-trigger: sat af
+-- frontend'ens knap (POST /api/trigger), pollet af scraper/scraper/
+-- trigger_watcher.py (en separat, altid-koerende launchd-job). Se
+-- worker/src/index.ts's /api/status, /api/trigger endpoints.
+CREATE TABLE IF NOT EXISTS control (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    run_now INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'Klar',
+    last_run_at TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO control (id) VALUES (1);

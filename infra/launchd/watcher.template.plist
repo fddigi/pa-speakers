@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>__LABEL__</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON_BIN__</string>
+        <string>-m</string>
+        <string>scraper.trigger_watcher</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__WORKING_DIR__</string>
+
+    <key>StandardOutPath</key>
+    <string>__LOG_DIR__/trigger-watcher.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__LOG_DIR__/trigger-watcher.err.log</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- KeepAlive, not StartInterval: this is a long-running poll loop (polls
+         Turso's control row every 15s from inside the process itself), not a
+         periodic one-shot task like scraper.template.plist - launchd should
+         restart it if it ever exits unexpectedly, since the webapp's "Kør
+         nu" button depends on it always being up to notice a triggered run. -->
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>

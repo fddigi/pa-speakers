@@ -11,10 +11,12 @@ or through the launchd job installed by `make install-launchd`.
 
 from __future__ import annotations
 
+import fcntl
 import logging
 import sys
+from pathlib import Path
 
-from scraper_core.config import get_settings
+from scraper_core.config import Settings, get_settings
 from scraper_core.healthcheck import ping_fail, ping_success
 from scraper_core.local_db import LocalStore
 from scraper_core.logging_setup import configure_logging
@@ -36,10 +38,43 @@ SOURCE_MODULES = {
     "dba": dba,
 }
 
+# Two independent launchd jobs can start a run at (almost) the same moment:
+# the hourly schedule (make install-launchd) and a webapp-triggered run (see
+# trigger_watcher.py's "Kør nu" button, make install-launchd-watcher). Both
+# invoke this same `scraper.main` entry point as a fresh process, and both
+# would otherwise race on the same local SQLite file (LocalStore) if they
+# ever overlapped. An advisory file lock makes the SECOND one skip its run
+# entirely instead of running concurrently - benign (the next scheduled or
+# triggered run picks it up), not an error.
+LOCK_PATH = Path("data/.scraper.lock")
+
 
 def run() -> int:
     settings = get_settings()
     configure_logging(settings.log_level)
+
+    LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = LOCK_PATH.open("w")
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        logger.warning(
+            "Another scraper run is already in progress (lock held on %s) - skipping "
+            "this run entirely rather than racing it on the same local SQLite file. "
+            "Expected if the hourly launchd job and a webapp-triggered run overlap.",
+            LOCK_PATH,
+        )
+        lock_file.close()
+        return 0
+
+    try:
+        return _run_locked(settings)
+    finally:
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+        lock_file.close()
+
+
+def _run_locked(settings: Settings) -> int:
     rcf_config = load_config()
 
     try:

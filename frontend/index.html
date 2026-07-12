@@ -80,6 +80,42 @@
       font-size: 0.85rem;
       color: var(--text-muted);
     }
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      background: var(--unknown-bg);
+      color: var(--unknown);
+    }
+    .status-pill::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .status-pill.busy { background: var(--fair-bg); color: var(--fair); }
+    .status-pill.err { background: var(--bad-bg); color: var(--bad); }
+    .status-pill.ok { background: var(--good-bg); color: var(--good); }
+    .run-banner {
+      margin: 0;
+      padding: 12px 16px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .run-banner.info { background: var(--good-bg); color: var(--good); }
+    .run-banner.warn { background: var(--fair-bg); color: var(--fair); }
 
     button, input[type=text] {
       font: inherit;
@@ -330,11 +366,19 @@
   <div class="page">
     <header class="topbar">
       <h1>RCF ART / Yamaha DXR PA-speakers</h1>
-      <div class="whoami-line">
-        Logget ind som <strong id="whoami">...</strong>
-        <button id="logout" class="subtle">Log ud</button>
+      <div class="topbar-actions">
+        <span id="status-pill" class="status-pill">–</span>
+        <button id="run-now-btn" class="primary">Kør nu</button>
+        <div class="whoami-line">
+          Logget ind som <strong id="whoami">...</strong>
+          <button id="logout" class="subtle">Log ud</button>
+        </div>
       </div>
     </header>
+
+    <div class="card" id="run-banner-card" style="display: none">
+      <p id="run-banner" class="run-banner"></p>
+    </div>
 
     <div class="card">
       <div class="stats-header">
@@ -722,12 +766,141 @@
       await loadSearchTerms();
     });
 
+    // "Kør nu" (run-now trigger), inspired by PLAGG's own webapp trigger
+    // button: this page never runs the scraper itself - it POSTs to
+    // /api/trigger, which flips a flag in Turso's `control` row that
+    // scraper/scraper/trigger_watcher.py (a separate always-running launchd
+    // job on the Mac Mini, see make install-launchd-watcher) polls every 15s
+    // and acts on. See that file's docstring for why a subprocess, not this
+    // Worker, actually runs the scrape.
+    let statusPollTimer = null;
+
+    function renderStatusPill(statusText) {
+      const pill = document.getElementById("status-pill");
+      pill.textContent = statusText || "–";
+      pill.className = "status-pill";
+      const t = (statusText || "").toLowerCase();
+      if (t.includes("kører")) pill.classList.add("busy");
+      else if (t.includes("fejl")) pill.classList.add("err");
+      else pill.classList.add("ok");
+    }
+
+    async function refreshStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/api/status`, { headers: authHeaders() });
+        if (!res.ok) return null;
+        const data = await res.json();
+        renderStatusPill(data?.status);
+        return data;
+      } catch {
+        return null;
+      }
+    }
+
+    function startStatusPolling() {
+      if (statusPollTimer) return; // already running
+      statusPollTimer = setInterval(async () => {
+        const data = await refreshStatus();
+        if (data && !String(data.status || "").toLowerCase().includes("kører")) {
+          stopStatusPolling();
+          await loadListings(); // fresh data after a completed run
+        }
+      }, 3000);
+    }
+    function stopStatusPolling() {
+      if (statusPollTimer) {
+        clearInterval(statusPollTimer);
+        statusPollTimer = null;
+      }
+      document.getElementById("run-now-btn").disabled = false;
+    }
+
+    // The button's disabled state is only a brief visual animation and is NOT
+    // reliable proof a run actually started (a real run takes minutes, and
+    // the status field only flips once trigger_watcher.py actually picks up
+    // the flag). This banner is independent of the button: shown immediately
+    // on click, cleared once polling actually observes status change away
+    // from its baseline, or replaced with a warning after a timeout (if no
+    // real run ever starts, e.g. trigger_watcher.py isn't running).
+    let runBannerWatchTimer = null;
+    let runBannerTimeoutId = null;
+
+    function showRunBanner(text, kind) {
+      const card = document.getElementById("run-banner-card");
+      const el = document.getElementById("run-banner");
+      el.textContent = text;
+      el.className = `run-banner ${kind || "info"}`;
+      card.style.display = "block";
+    }
+    function hideRunBanner() {
+      document.getElementById("run-banner-card").style.display = "none";
+    }
+    function clearRunBannerWatch() {
+      if (runBannerWatchTimer) {
+        clearInterval(runBannerWatchTimer);
+        runBannerWatchTimer = null;
+      }
+      if (runBannerTimeoutId) {
+        clearTimeout(runBannerTimeoutId);
+        runBannerTimeoutId = null;
+      }
+    }
+
+    document.getElementById("run-now-btn").addEventListener("click", async () => {
+      const btn = document.getElementById("run-now-btn");
+      btn.disabled = true;
+
+      const baselineStatus = (document.getElementById("status-pill").textContent || "")
+        .trim()
+        .toLowerCase();
+      clearRunBannerWatch();
+      showRunBanner("Kørsel sat i gang - opdaterer om lidt...", "info");
+
+      try {
+        await fetch(`${API_BASE}/api/trigger`, { method: "POST", headers: authHeaders() });
+      } catch {
+        // fejl - status-polling viser stadig seneste kendte status
+      }
+      await refreshStatus();
+      startStatusPolling();
+
+      runBannerWatchTimer = setInterval(() => {
+        const current = (document.getElementById("status-pill").textContent || "")
+          .trim()
+          .toLowerCase();
+        if (current && current !== baselineStatus) {
+          hideRunBanner();
+          clearRunBannerWatch();
+        }
+      }, 1000);
+
+      // trigger_watcher.py polls every 15s (see POLL_INTERVAL_S) - 45s gives
+      // a full poll interval plus network/Turso latency margin before
+      // warning that nothing seems to have picked up the trigger.
+      runBannerTimeoutId = setTimeout(() => {
+        showRunBanner(
+          "Ingen bekræftelse endnu på at kørslen er startet - tjek at " +
+            "trigger_watcher.py kører (make install-launchd-watcher).",
+          "warn",
+        );
+        if (runBannerWatchTimer) {
+          clearInterval(runBannerWatchTimer);
+          runBannerWatchTimer = null;
+        }
+      }, 45000);
+    });
+
     (async () => {
       const me = await requireSession();
       if (!me) return;
       document.getElementById("whoami").textContent = me.username;
       await loadListings();
       await loadSearchTerms();
+      const status = await refreshStatus();
+      if (status && String(status.status || "").toLowerCase().includes("kører")) {
+        document.getElementById("run-now-btn").disabled = true;
+        startStatusPolling();
+      }
     })();
   </script>
 </body>

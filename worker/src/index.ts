@@ -134,6 +134,47 @@ app.delete("/api/search-terms/:term", requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
+// --- "Kør nu" (run-now trigger), inspired by PLAGG's own webapp trigger
+// button: sets a flag in Turso's `control` singleton row, which
+// scraper/scraper/trigger_watcher.py (a separate always-running launchd job,
+// see make install-launchd-watcher) polls every 15s and acts on. This Worker
+// never runs the scraper itself - it only flips a flag the local machine
+// picks up, since a Cloudflare Worker cannot run Playwright/long-lived
+// scraping jobs. ---
+
+// Ensures the singleton control row exists even if this Worker is hit before
+// trigger_watcher.py has ever run locally (that script also applies this
+// same schema idempotently on its own startup - whichever runs first wins,
+// no conflict either way).
+async function ensureControlRow(db: ReturnType<typeof getDbClient>): Promise<void> {
+  await db.execute(
+    `CREATE TABLE IF NOT EXISTS control (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      run_now INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'Klar',
+      last_run_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+  );
+  await db.execute("INSERT OR IGNORE INTO control (id) VALUES (1)");
+}
+
+app.get("/api/status", requireAuth, async (c) => {
+  const db = getDbClient(c.env);
+  await ensureControlRow(db);
+  const result = await db.execute("SELECT * FROM control WHERE id = 1");
+  return c.json(result.rows[0] ?? null);
+});
+
+app.post("/api/trigger", requireAuth, async (c) => {
+  const db = getDbClient(c.env);
+  await ensureControlRow(db);
+  await db.execute(
+    "UPDATE control SET run_now = 1, updated_at = datetime('now') WHERE id = 1",
+  );
+  return c.json({ ok: true });
+});
+
 // --- Data endpoints against the `listings` table (matches
 // scraper/scraper/sources/*.py and worker/migrations/0001_init.sql). Migrated from
 // the PA SPEAKERS project's read-only dashboard.html - this is display-only, so

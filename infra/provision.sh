@@ -255,11 +255,29 @@ provision_healthcheck() {
 
 write_repo_secrets() {
   log_step "5/5 Writing generated identifiers back as repo secrets"
-  gh_secret_set "TURSO_DB_NAME" "$PROJECT_NAME"
-  gh_secret_set "CF_WORKER_NAME" "$PROJECT_NAME"
-  gh_secret_set "CLOUDFLARE_ACCOUNT_ID" "$CLOUDFLARE_ACCOUNT_ID"
-  if [[ -n "$HEALTHCHECK_URL" ]]; then
-    gh_secret_set "HEALTHCHECK_URL" "$HEALTHCHECK_URL"
+  # NOT fatal if this fails: writing repo-level Actions secrets requires a real
+  # user/PAT credential - there is NO "secrets" permission scope at all for
+  # GITHUB_TOKEN (confirmed against GitHub's own docs, 2026-07-12), so this
+  # ALWAYS fails ("HTTP 403: Resource not accessible by integration" fetching
+  # the repo's public key) when bootstrap.yml runs with the ordinary
+  # GITHUB_TOKEN, regardless of the `permissions:` block. Previously this was
+  # fatal under `set -euo pipefail` and silently blocked commit_generated_config
+  # (called right after this) from EVER running - which is how wrangler.toml's
+  # KV namespace id stayed a placeholder on `main` even though every individual
+  # CI run patched it correctly in its own ephemeral checkout.
+  if ! (
+    gh_secret_set "TURSO_DB_NAME" "$PROJECT_NAME"
+    gh_secret_set "CF_WORKER_NAME" "$PROJECT_NAME"
+    gh_secret_set "CLOUDFLARE_ACCOUNT_ID" "$CLOUDFLARE_ACCOUNT_ID"
+    if [[ -n "$HEALTHCHECK_URL" ]]; then
+      gh_secret_set "HEALTHCHECK_URL" "$HEALTHCHECK_URL"
+    fi
+  ); then
+    log_warn "Could not write repo secrets (expected when running via the" \
+      "ordinary GITHUB_TOKEN - see comment above). Set them manually with a" \
+      "real user/PAT credential: gh secret set CF_WORKER_NAME --body '${PROJECT_NAME}'" \
+      "(and TURSO_DB_NAME the same way, plus CLOUDFLARE_ACCOUNT_ID/HEALTHCHECK_URL)." \
+      "deploy.yml's Worker deploy step needs CF_WORKER_NAME to be set to work."
   fi
   log_info "TURSO_AUTH_TOKEN / SESSION_HMAC_SECRET stay Worker-only secrets, not duplicated as repo secrets."
 }

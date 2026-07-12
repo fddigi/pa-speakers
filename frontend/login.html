@@ -2,17 +2,134 @@
 <html lang="da">
 <head>
   <meta charset="utf-8" />
-  <title>Log ind</title>
+  <title>Log ind — PA Speakers</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --surface: #ffffff;
+      --border: #e2e5ea;
+      --text: #1a1d24;
+      --text-muted: #6b7280;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --bad: #b91c1c;
+      --bad-bg: #fee2e2;
+      --radius: 10px;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 24px rgba(0, 0, 0, 0.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #14161a;
+        --surface: #1c1f26;
+        --border: #2c303a;
+        --text: #e7e9ee;
+        --text-muted: #9aa1ad;
+        --accent: #5b8def;
+        --accent-hover: #7ba3f2;
+        --bad: #f87171;
+        --bad-bg: #3a1414;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.4);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 32px 28px;
+      width: 100%;
+      max-width: 340px;
+    }
+    .login-card h1 {
+      font-size: 1.1rem;
+      margin: 0 0 4px;
+      font-weight: 650;
+    }
+    .login-card p.subtitle {
+      margin: 0 0 24px;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .field { margin-bottom: 16px; }
+    input {
+      width: 100%;
+      font: inherit;
+      font-size: 0.9rem;
+      padding: 9px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+    }
+    input:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+      background: var(--surface);
+    }
+    button {
+      width: 100%;
+      font: inherit;
+      font-size: 0.9rem;
+      font-weight: 650;
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      margin-top: 4px;
+      transition: background-color 0.12s ease;
+    }
+    button:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .error-text {
+      color: var(--bad);
+      background: var(--bad-bg);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 0.82rem;
+      margin: 14px 0 0;
+      display: none;
+    }
+    .error-text:not(:empty) { display: block; }
+  </style>
 </head>
 <body>
-  <h1>Log ind</h1>
-  <form id="login-form">
-    <label>Brugernavn <input type="text" id="username" autocomplete="username" required /></label><br />
-    <label>Password <input type="password" id="password" autocomplete="current-password" required /></label><br />
-    <button type="submit">Log ind</button>
-  </form>
-  <p id="error" style="color: red"></p>
+  <div class="login-card">
+    <h1>PA Speakers</h1>
+    <p class="subtitle">Log ind for at se annoncer og søgetermer</p>
+    <form id="login-form">
+      <div class="field">
+        <label for="username">Brugernavn</label>
+        <input type="text" id="username" autocomplete="username" required />
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" autocomplete="current-password" required />
+      </div>
+      <button type="submit">Log ind</button>
+    </form>
+    <p class="error-text" id="error"></p>
+  </div>
 
   <script src="config.js"></script>
   <script>

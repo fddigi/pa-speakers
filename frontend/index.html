@@ -5,59 +5,304 @@
   <title>PA Speakers</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 24px; }
-    .controls { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
-    select, input[type=text] { padding: 4px 8px; }
-    table { border-collapse: collapse; width: 100%; font-size: 13px; }
-    th, td { padding: 6px 10px; border-bottom: 1px solid #ddd; text-align: left; white-space: nowrap; }
-    th { cursor: pointer; user-select: none; }
-    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    :root {
+      --bg: #f5f6f8;
+      --surface: #ffffff;
+      --border: #e2e5ea;
+      --text: #1a1d24;
+      --text-muted: #6b7280;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --good: #15803d;
+      --good-bg: #dcfce7;
+      --fair: #92660a;
+      --fair-bg: #fef3c7;
+      --bad: #b91c1c;
+      --bad-bg: #fee2e2;
+      --unknown: #4b5563;
+      --unknown-bg: #e5e7eb;
+      --radius: 8px;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.06);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #14161a;
+        --surface: #1c1f26;
+        --border: #2c303a;
+        --text: #e7e9ee;
+        --text-muted: #9aa1ad;
+        --accent: #5b8def;
+        --accent-hover: #7ba3f2;
+        --good: #4ade80;
+        --good-bg: #14301f;
+        --fair: #facc15;
+        --fair-bg: #33280a;
+        --bad: #f87171;
+        --bad-bg: #3a1414;
+        --unknown: #9aa1ad;
+        --unknown-bg: #262a32;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.4);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 0 0 48px;
+    }
+
+    .page {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px 20px 0;
+    }
+
+    header.topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    header.topbar h1 {
+      font-size: 1.35rem;
+      margin: 0;
+      font-weight: 650;
+    }
+    .whoami-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    button, input[type=text], select {
+      font: inherit;
+      font-size: 0.85rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      padding: 7px 11px;
+    }
+    button {
+      cursor: pointer;
+      border-color: var(--border);
+      transition: background-color 0.12s ease, border-color 0.12s ease;
+    }
+    button:hover { border-color: var(--accent); color: var(--accent); }
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+    button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+    button.subtle { background: transparent; border-color: transparent; color: var(--text-muted); padding: 4px 8px; }
+    button.subtle:hover { color: var(--bad); }
+    input[type=text]:focus, select:focus, button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+    }
+
+    /* Stats bar */
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 14px 16px;
+    }
+    .stat {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: var(--unknown-bg);
+      color: var(--unknown);
+    }
+    .stat strong { font-size: 0.95rem; }
+    .stat.total { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+    .stat[data-class="GODT KØB"] { background: var(--good-bg); color: var(--good); }
+    .stat[data-class="FAIR"] { background: var(--fair-bg); color: var(--fair); }
+    .stat[data-class="OVERPRISET"] { background: var(--bad-bg); color: var(--bad); }
+
+    /* Search terms */
+    details#search-terms-section summary {
+      cursor: pointer;
+      padding: 14px 16px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      user-select: none;
+    }
+    details#search-terms-section summary::-webkit-details-marker { display: none; }
+    details#search-terms-section summary::before {
+      content: "▸";
+      display: inline-block;
+      transition: transform 0.15s ease;
+      color: var(--text-muted);
+    }
+    details#search-terms-section[open] summary::before { transform: rotate(90deg); }
+    .search-terms-body { padding: 0 16px 16px; }
+    .term-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; padding: 0; list-style: none; }
+    .term-chips li {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 6px 5px 12px;
+      font-size: 0.82rem;
+    }
+    .term-chips li button {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      padding: 2px 6px;
+      border-radius: 999px;
+      line-height: 1;
+      font-size: 0.9rem;
+    }
+    .term-chips li button:hover { background: var(--bad-bg); color: var(--bad); }
+    #search-terms-form { display: flex; gap: 8px; }
+    #search-terms-form input { flex: 1; max-width: 320px; }
+
+    /* Filters */
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      padding: 14px 16px;
+    }
+    .controls input[type=text] { min-width: 220px; flex: 1; }
+
+    /* Table */
+    .table-scroll {
+      overflow-x: auto;
+      border-radius: var(--radius);
+    }
+    table { border-collapse: collapse; width: 100%; font-size: 0.83rem; white-space: nowrap; }
+    thead th {
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      text-align: left;
+      padding: 10px 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+    }
+    thead th:hover { color: var(--accent); }
+    tbody td { padding: 9px 14px; border-bottom: 1px solid var(--border); }
+    tbody tr:hover { background: var(--bg); }
+    tbody tr:last-child td { border-bottom: none; }
+    a.row-link { color: var(--accent); text-decoration: none; font-weight: 600; }
+    a.row-link:hover { text-decoration: underline; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    .badge[data-class="GODT KØB"] { background: var(--good-bg); color: var(--good); }
+    .badge[data-class="FAIR"] { background: var(--fair-bg); color: var(--fair); }
+    .badge[data-class="OVERPRISET"] { background: var(--bad-bg); color: var(--bad); }
+    .badge[data-class="UKENDT"] { background: var(--unknown-bg); color: var(--unknown); }
+
+    #count-line { padding: 12px 16px; font-size: 0.8rem; color: var(--text-muted); }
+    .error-text { color: var(--bad); font-size: 0.85rem; padding: 0 16px; }
+    .empty-state { padding: 40px 16px; text-align: center; color: var(--text-muted); }
   </style>
 </head>
 <body>
-  <h1>RCF ART / Yamaha DXR PA-speakers</h1>
-  <p>Logget ind som <span id="whoami">...</span> (<button id="logout">log ud</button>)</p>
+  <div class="page">
+    <header class="topbar">
+      <h1>RCF ART / Yamaha DXR PA-speakers</h1>
+      <div class="whoami-line">
+        Logget ind som <strong id="whoami">...</strong>
+        <button id="logout" class="subtle">Log ud</button>
+      </div>
+    </header>
 
-  <details id="search-terms-section">
-    <summary>Søgetermer (ønskeseddel)</summary>
-    <ul id="search-terms-list"></ul>
-    <form id="search-terms-form">
-      <input type="text" id="search-terms-input" placeholder="fx RCF ART 315" required />
-      <button type="submit">Tilføj</button>
-    </form>
-    <p id="search-terms-error" style="color: red"></p>
-  </details>
+    <div class="card">
+      <div class="stats" id="stats-bar"></div>
+    </div>
 
-  <div class="controls">
-    <select id="filter-classification">
-      <option value="">Alle klassifikationer</option>
-      <option value="GODT KØB">GODT KØB</option>
-      <option value="FAIR">FAIR</option>
-      <option value="OVERPRISET">OVERPRISET</option>
-      <option value="UKENDT">UKENDT</option>
-    </select>
-    <input type="text" id="filter-search" placeholder="Søg i titel/model..." />
-    <button id="reload">Genindlæs</button>
+    <details class="card" id="search-terms-section">
+      <summary>Søgetermer (ønskeseddel)</summary>
+      <div class="search-terms-body">
+        <ul class="term-chips" id="search-terms-list"></ul>
+        <form id="search-terms-form">
+          <input type="text" id="search-terms-input" placeholder="fx RCF ART 315" required />
+          <button type="submit" class="primary">Tilføj</button>
+        </form>
+        <p class="error-text" id="search-terms-error"></p>
+      </div>
+    </details>
+
+    <div class="card">
+      <div class="controls">
+        <select id="filter-classification">
+          <option value="">Alle klassifikationer</option>
+          <option value="GODT KØB">GODT KØB</option>
+          <option value="FAIR">FAIR</option>
+          <option value="OVERPRISET">OVERPRISET</option>
+          <option value="UKENDT">UKENDT</option>
+        </select>
+        <input type="text" id="filter-search" placeholder="Søg i titel/model..." />
+        <button id="reload">Genindlæs</button>
+      </div>
+
+      <div class="table-scroll">
+        <table id="listings-table">
+          <thead>
+            <tr>
+              <th data-key="classification">Klassifikation</th>
+              <th data-key="model">Model</th>
+              <th data-key="gen">Gen</th>
+              <th data-key="quantity">Antal</th>
+              <th data-key="price_per_unit_dkk" data-numeric="true">Pris/enhed</th>
+              <th data-key="source">Kilde</th>
+              <th data-key="title">Titel</th>
+              <th data-key="first_seen">Først set</th>
+              <th>Link</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p id="count-line"></p>
+      <p class="error-text" id="error"></p>
+    </div>
   </div>
-
-  <table id="listings-table">
-    <thead>
-      <tr>
-        <th data-key="classification">Klassifikation</th>
-        <th data-key="model">Model</th>
-        <th data-key="gen">Gen</th>
-        <th data-key="quantity">Antal</th>
-        <th data-key="price_per_unit_dkk" data-numeric="true">Pris/enhed</th>
-        <th data-key="source">Kilde</th>
-        <th data-key="title">Titel</th>
-        <th data-key="first_seen">Først set</th>
-        <th>Link</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-  <p id="count-line"></p>
-  <p id="error" style="color: red"></p>
 
   <script src="config.js"></script>
   <script>
@@ -68,7 +313,7 @@
     // different registrable domains, and Safari's ITP (and increasingly
     // Chrome) blocks cross-site cookies entirely by default regardless of
     // SameSite. See login.html's comment for the full explanation.
-    const CLASS_COLORS = { "GODT KØB": "#1b7a3d", "FAIR": "#8a6d00", "OVERPRISET": "#a12222", "UKENDT": "#666" };
+    const CLASSIFICATIONS = ["GODT KØB", "FAIR", "OVERPRISET", "UKENDT"];
     let allListings = [];
 
     function authHeaders() {
@@ -103,7 +348,36 @@
       }
       const { listings } = await res.json();
       allListings = listings;
+      renderStats();
       renderTable();
+    }
+
+    function renderStats() {
+      const bar = document.getElementById("stats-bar");
+      bar.innerHTML = "";
+
+      const total = document.createElement("span");
+      total.className = "stat total";
+      total.innerHTML = `<strong>${allListings.length}</strong> annoncer i alt`;
+      bar.appendChild(total);
+
+      for (const cls of CLASSIFICATIONS) {
+        const count = allListings.filter((row) => (row.classification ?? "UKENDT") === cls).length;
+        if (count === 0) continue;
+        const stat = document.createElement("span");
+        stat.className = "stat";
+        stat.dataset.class = cls;
+        stat.innerHTML = `<strong>${count}</strong> ${cls}`;
+        bar.appendChild(stat);
+      }
+    }
+
+    function classificationBadge(classification) {
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.dataset.class = classification;
+      badge.textContent = classification;
+      return badge;
     }
 
     function renderTable() {
@@ -117,17 +391,24 @@
         return haystack.includes(search);
       });
 
+      if (filtered.length === 0) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 9;
+        td.className = "empty-state";
+        td.textContent = allListings.length === 0 ? "Ingen annoncer endnu." : "Ingen annoncer matcher filteret.";
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        document.getElementById("count-line").textContent = `${filtered.length} af ${allListings.length} annoncer vist`;
+        return;
+      }
+
       for (const row of filtered) {
         const tr = document.createElement("tr");
         const classification = row.classification ?? "UKENDT";
-        const color = CLASS_COLORS[classification] ?? "#666";
 
         const classCell = document.createElement("td");
-        const dot = document.createElement("span");
-        dot.className = "dot";
-        dot.style.background = color;
-        classCell.appendChild(dot);
-        classCell.appendChild(document.createTextNode(classification));
+        classCell.appendChild(classificationBadge(classification));
         tr.appendChild(classCell);
 
         const priceStr = row.price_per_unit_dkk != null ? `${Math.round(row.price_per_unit_dkk)} kr` : "?";
@@ -148,10 +429,11 @@
 
         const linkCell = document.createElement("td");
         const link = document.createElement("a");
+        link.className = "row-link";
         link.href = row.url ?? "#";
         link.target = "_blank";
         link.rel = "noopener";
-        link.textContent = "link";
+        link.textContent = "Se annonce →";
         linkCell.appendChild(link);
         tr.appendChild(linkCell);
 
@@ -205,9 +487,12 @@
       list.innerHTML = "";
       for (const row of searchTerms) {
         const li = document.createElement("li");
-        li.appendChild(document.createTextNode(`${row.term} `));
+        li.appendChild(document.createTextNode(row.term));
         const removeBtn = document.createElement("button");
-        removeBtn.textContent = "fjern";
+        removeBtn.type = "button";
+        removeBtn.textContent = "✕";
+        removeBtn.setAttribute("aria-label", `Fjern ${row.term}`);
+        removeBtn.title = "Fjern søgeterm";
         removeBtn.addEventListener("click", () => removeSearchTerm(row.term));
         li.appendChild(removeBtn);
         list.appendChild(li);

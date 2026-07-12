@@ -5,7 +5,16 @@
 
 import type { SessionPayload } from "./types";
 
-const PBKDF2_ITERATIONS = 210_000;
+// Cloudflare Workers' ACTUAL production crypto.subtle enforces a hard cap of
+// 100,000 PBKDF2 iterations ("NotSupportedError: Pbkdf2 failed: iteration
+// counts above 100000 are not supported") - confirmed 2026-07-12 via a real
+// deployed Worker. This is NOT enforced by `wrangler dev` (local) or by plain
+// Node (used by this repo's own vitest unit tests), so 210_000 passed every
+// local/CI test while making EVERY production login fail 100% of the time -
+// verifyPassword()'s try/catch silently converts the resulting exception into
+// `false`, indistinguishable from a wrong password. Use 100_000, the max
+// Cloudflare actually allows.
+const PBKDF2_ITERATIONS = 100_000;
 const HASH_BYTE_LENGTH = 32;
 
 function toBase64Url(bytes: ArrayBuffer | Uint8Array): string {

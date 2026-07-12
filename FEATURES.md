@@ -281,3 +281,339 @@ forsvinder på timer.
 
 **Risici:** Mere trafik mod Kleinanzeigen samlet set — overvåg bot-wall-hyppighed
 i loggen efter udrulning og skru ned ved behov.
+
+---
+
+## F8: Sortering fra mobil-kortvisningen
+
+**Problem:** Sorterings-JS'en (`applySort()`, `sortKey`/`sortAsc`) fungerer
+uafhængigt af viewport, MEN de eneste triggere er click-handlers på
+`<th><button></button></th>` inde i `<thead>` (index.html linje 686-694). På
+mobil (`@media (max-width: 640px)`) skjules HELE `<thead>` med den bevidste
+sr-only-teknik (`position:absolute; clip:rect(0,0,0,0); width:1px`, linje
+321-331) for at give plads til kort-layoutet og undgå den vandrette scroll der
+tidligere blev fjernet. Resultatet: der findes INGEN måde at udløse en sortering
+fra mobil overhovedet -- hverken efter pris eller andet. Bekræftet ved læsning,
+ikke gættet: knapperne er i det klippede `<thead>`, og der er ingen anden
+sort-trigger i mobil-DOM'en. Standard-sorteringen (klassifikation, så nyeste)
+er fornuftig, men pris -- det mest efterspurgte -- kan ikke nås på telefonen.
+
+**Design:**
+- Tilføj ét mobil-synligt sorteringskontrol i `.controls`-rækken (ved siden af
+  fritekstfilteret), fx en native `<select>` "Sortér efter": Standard,
+  Pris/enhed (lav→høj), Pris/enhed (høj→lav), Først set (nyeste), Model. Native
+  `<select>` giver gratis en god touch-picker og introducerer ingen vandret
+  scroll (fuld bredde, wrapper i det eksisterende flex-layout).
+- Skjul kontrollen på desktop (`@media (min-width: 641px) { #mobile-sort {
+  display:none } }`), hvor `<thead>`-knapperne allerede virker -- undgå to
+  konkurrerende sort-UI'er på samme viewport.
+- GENBRUG den eksisterende motor: kontrollen sætter blot `sortKey`/`sortAsc`
+  og kalder `applySort()` + `renderTable()`. Ingen ny sorteringslogik. Én
+  option-værdi = "" nulstiller til standard-sorteringen (`sortKey = null`).
+- Hold `<select>` og `<thead>`-pilene i synk: `updateSortIndicators()` bør også
+  opdatere `<select>.value`, så en desktop-klik-sortering afspejles hvis vinduet
+  gøres smalt (billig tilføjelse i samme funktion).
+- Pris/enhed er allerede landed cost pr. enhed (`price_per_unit_dkk`), så
+  sorteringen er retfærdig på tværs af kilder -- ingen backend-ændring.
+
+**Berørte filer:** `frontend/index.html` (KUN denne -- CSS-media-query, ét
+`<select>` i markup, én change-handler + lille tilføjelse i
+`updateSortIndicators()`). Ingen scraper-, worker- eller DB-ændring.
+
+**Acceptkriterier:**
+- På ≤640px viewport kan brugeren sortere efter pris/enhed stigende OG faldende
+  fra kortvisningen uden vandret scroll.
+- "Standard"-valget giver præcis den nuværende kombinerede sortering
+  (klassifikation, så nyeste) -- `sortKey = null`.
+- Desktop uændret: `<select>` er skjult, `<thead>`-knapperne virker som før.
+- Klientside-filtrene (klassifikations-chips + fritekst) bevarer den valgte
+  sortering (samme `applySort()`-flow som i dag).
+
+**Risici:** Meget lav -- rent additiv frontend-ændring i én fil. Eneste
+faldgrube er dobbelt-UI hvis media-query-grænsen (640/641px) ikke matcher
+kort-layoutets grænse; brug samme breakpoint. Sørg for at `<select>` ikke selv
+er bredere end viewport (den er blok/fuld-bredde, så ingen ny scroll).
+
+---
+
+## F9: Kategorisering af søgninger (flere produktgrupper)
+
+**Problem:** `search_terms` er i dag en HELT flad liste (config.yaml
+`primary`/`secondary`, eller Turso-tabellen `search_terms(term, enabled,
+created_at)` -- ingen kategori-kolonne). I main.py flades listen yderligere ud
+til `{"primary": [...], "secondary": []}` (linje 100), og ALLE aktiverede
+kilder søger ALLE termer -- ingen per-kategori-routing. Brugeren vil gruppere
+søgninger i flere kategorier (PA-toppe + PA-sub + studie-sub + synths) for
+overblik. Eksemplet antyder en UDVIDELSE af produktscopet langt ud over de 5
+nuværende PA-modeller.
+
+**Ærlig vurdering af den reelle implikation (læst i koden, ikke antaget):**
+Der er to vidt forskellige fortolkninger, og de skal holdes adskilt:
+
+- **(a) Ren organisering** af eksisterende søgetermer + tagging af annoncer med
+  hvilken kategori der fandt dem. Middel-stort, cross-cutting job (rører
+  scraper + worker + frontend + to skemaer), men lav semantisk risiko.
+- **(b) Reelt scope til synths/studie-udstyr.** Dette er en MEGET større epic
+  og bryder tre hårdkodede antagelser:
+  1. `normalize.py MODEL_PATTERNS` er hårdkodet til RCF ART (910/710/708/
+     sub705/712) + Yamaha DXR. Synths/studie-udstyr har helt andre
+     modelnavne-mønstre (Moog Subsequent, Prophet, Genelec 8040, ...) -- det
+     er ikke 5 nye regex'er, men en åben taksonomi pr. brand. Uden dem giver
+     `extract_model()` `None` → annoncen bliver `UKENDT` og leverer nul
+     klassifikationsværdi.
+  2. `classify.py`: percentil-klassifikationen grupperer pr. **(model, gen)**
+     (`WHERE model=? AND gen=?`, 180 dages lookback, min. 5 samples), IKKE pr.
+     helt datasæt. Det betyder faktisk at en synth-kategori IKKE korrumperer
+     RCF-percentilerne -- synths ender som `model=None`/`UKENDT` og udelukkes
+     automatisk fra hver RCF-pulje (query'en filtrerer `model=?`). Men "gen"
+     (MK1-5) er et RCF/Yamaha-koncept; synths ville alle samles i
+     `(synth_model, "uoplyst")` -- percentil-motoren KAN genbruges pr. ny
+     model, men de statiske tærskler (`thresholds`) er hårdkodede RCF-nøgler.
+  3. Kilde-routing: `sources/thomann.py` poller en RCF-specifik B-Stock-
+     kategoriside (`thomann_category_url`) -- den finder ALDRIG synths uanset
+     søgeterm. Term-baserede kilder (Kleinanzeigen/Blocket/DBA/Reverb) ville
+     søge synth-termer fint, men Thomann-kilden hører reelt kun til
+     PA-kategorien. Der er altså ingen kategori→kilde-mapping i dag.
+
+  → Design til (a) NU, og lad (b) være en eksplicit, separat epic. (a) leverer
+  overblikket brugeren beder om uden at love en klassifikationsværdi systemet
+  ikke kan give for nye kategorier endnu.
+
+**Design (v1 = fortolkning (a), organisering + tagging):**
+- Skema: tilføj `category TEXT NOT NULL DEFAULT 'PA-højttalere'` til
+  `search_terms`-tabellen (Turso) OG et tilsvarende felt i config.yaml-
+  fallback'en (`search_terms:` bliver en liste af `{term, category}` eller en
+  dict pr. kategori). `search_terms.py:load_search_terms()` returnerer nu
+  (term, category)-par, ikke en flad strengliste.
+- main.py: STOP med at flade listen til `primary/secondary` (linje 100) på en
+  måde der taber kategorien -- kilderne skal kunne se hvilken kategori en term
+  hører til, så den fundne annonce kan tagges. Minimalt: behold en term→kategori
+  opslagstabel og sæt `category` på hver normaliseret annonce via
+  `extra["search_term"]` (Reverb sætter den allerede; de andre kilder skal
+  gøre det samme).
+- `listings`-tabellen: ny `category`-kolonne, sat ved indlæsning ud fra den
+  term der fandt annoncen. `recompute.py`: backfill af `category` for
+  eksisterende rækker (default 'PA-højttalere').
+- Webapp Worker (`worker/src/index.ts`): `/api/search-terms` GET/POST/DELETE
+  udvides med `category`; `/api/listings` får valgfrit `?category=`-filter.
+- Frontend (`index.html`): grupper ønskeseddel-chippene pr. kategori,
+  tilføj-formen får en kategori-vælger, og listen får et kategori-filter
+  (samme klientside-mønster som klassifikations-chippene).
+- classify.py: uændret i v1 -- den er allerede model+gen-partitioneret, så nye
+  kategorier uden model-regex bliver blot `UKENDT` (ærligt, indtil (b)).
+
+**Eksplicit UDE af v1-scope (dokumentér som opfølgnings-epic, ikke byg nu):**
+nye `MODEL_PATTERNS` pr. kategori, per-kategori statiske tærskler / ikke-gen-
+baseret percentil-gruppering, kategori→kilde-routing (hvilke kilder søger hvilke
+kategorier), og per-kategori Thomann/kategorisides-URL'er. UDEN disse vil en
+"synths"-kategori vise synth-annoncer, men klassificere dem ALLE som UKENDT og
+slet ikke dække Thomann. Sæt forventningen tydeligt.
+
+**Berørte filer:** `scraper/scraper/search_terms.py`, `scraper/scraper/main.py`,
+`config.yaml`, `scraper/scraper/pipeline.py` (tag med kategori), `db.py`/skema
+(`category`-kolonne på `listings` + `search_terms`), `recompute.py` (backfill),
+`worker/src/index.ts` (+`worker/src/db.ts`), `frontend/index.html`. (Bemærk:
+to datastore-skemamigreringer + tre lag -- scraper, worker, frontend.)
+
+**Acceptkriterier:**
+- Søgetermer kan oprettes/vises grupperet under en kategori fra webappen; en
+  ny term får en kategori.
+- En annonce tagges med kategorien for den term der fandt den; `?category=`
+  filtrerer listen; frontend kan filtrere pr. kategori.
+- Eksisterende RCF/DXR-annoncer og deres percentil-klassifikation er UÆNDRET
+  (kategori-laget rører ikke model+gen-grupperingen).
+- recompute.py backfiller `category` uden at ændre klassifikation.
+- --dry-run skriver intet (også ingen kategori-writes).
+
+**Risici:** STØRRE end det lyder. (1) Skemamigrering i BÅDE Turso og lokal
+SQLite + worker + frontend -- cross-cutting, ikke en enkelt fil. (2) Reel
+scope-fælde: hvis brugeren faktisk mener synths/studie-udstyr (fortolkning b),
+kræver det ny model-taksonomi, nye klassifikationsgrupper og kilde-routing --
+en separat epic på størrelse med F4+. v1 leverer BEVIDST kun organisering +
+tagging og efterlader nye kategorier som UKENDT; det skal kommunikeres, ellers
+opleves featuren som "halvt virkende". (3) main.py's flad-gøring af søgetermer
+(linje 100) er et bevidst kompatibilitetshack for at holde alle kilders
+`primary + secondary`-read i live -- at bære kategorien igennem uden at bryde
+den kontrakt kræver omhu.
+
+---
+
+## F10: Spike: prishistorik / klikbar klassifikations-drilldown
+
+**Problem:** Klassifikations-badget (GODT KØB / FAIR / OVERPRISET / UKENDT) er
+i dag en sort boks — brugeren ser konklusionen, ikke grundlaget. Ønsket
+formuleres som "prishistorik" (à la Pricerunner), men vores case er
+fundamentalt anderledes end en prissammenligningsside, og det skal en spike
+afklare FØR der bygges en graf på en forkert præmis.
+
+**Kernefund fra forudgående research (dokumentér i spiken):**
+- Pricerunner/lignende viser pris-over-tid for et FAST retail-SKU: samme
+  vare kan genudbydes/genopfyldes i det uendelige, så der findes en stabil
+  produkt-identitet at følge på tidsaksen ("kostede den mindre for 3 mdr.
+  siden?").
+- Reverb Price Guide (og GearBook) viser IKKE én annonces pris over tid, men
+  aggregerer REALISEREDE salgspriser PR. MODEL (Reverb: ~240k produkter,
+  gennemsnit + transaktionshistorik år tilbage + et "Price Index" for
+  kategori/brand-trends). Dvs. tidsserien findes kun på MODEL-niveau, som et
+  gennemsnit af mange salg — ikke pr. fysisk enhed.
+- Vores case: hver annonce er en UNIK, brugt engangsvare der sælges én gang
+  og forsvinder permanent. Der findes intet SKU at spore over tid for samme
+  fysiske højttaler, og vi observerer ALDRIG realiserede salgspriser (kun
+  udbudspriser ved first_seen). Vi kan derfor hverken lave Pricerunners
+  SKU-tidsserie eller Reverbs sold-price-tidsserie.
+- Det ENESTE der har en meningsfuld tidsdimension hos os er FORDELINGEN af
+  udbudspriser på tværs af mange annoncer for samme model+gen — hvilket er
+  præcis det `classify_dynamic()` allerede beregner (rullende p25/p75 over
+  `lookback_days=180`, `min_samples=5`). Drilldownen skal derfor vise
+  "fordelingen der lå til grund for klassifikationen", ikke "denne vares pris
+  over tid".
+
+**Design (hvad spiken skal afklare + skitse til drilldown):**
+- Reframe featuren fra "prishistorik" til "klassifikations-drilldown": gør
+  badget klikbart → panel der viser populationen bag percentil-beregningen.
+- KONKRET indhold (verificér mod `listings`-skema — alle felter findes
+  allerede: `price_per_unit_dkk`, `model`, `gen`, `classification`,
+  `classification_method`, `source`, `first_seen`, `url`, `title`):
+  1. Histogram/scatter over `price_per_unit_dkk` for ALLE annoncer med samme
+     model+gen inden for `lookback_days` (samme datasæt classify_dynamic
+     forespørger).
+  2. Markerede p25- og p75-linjer (grænserne der afgør badget).
+  3. Denne annonces egen pris markeret på aksen → visuel forklaring på
+     hvorfor badget blev som det blev.
+  4. `n` (antal datapunkter) + metode ("dynamisk (n=12)" vs "statisk
+     (utilstrækkelig historik)"). Ved statisk fallback: vis at n <
+     `min_samples` og hvilke faste config-tærskler der blev brugt i stedet.
+  5. Liste over de sammenlignelige annoncer der udgør populationen (titel,
+     kilde, pris, first_seen, link).
+- Ærlig caveat der SKAL med i UI'et: det er UDBUDSPRISER for annoncer set
+  inden for 180 dage, ikke realiserede salgspriser; annoncer der stadig ligger
+  kan være solde/døde. Det er et øjebliksbillede af markedspopulationen, ikke
+  en tidsserie for én fysisk enhed.
+- Spiken skal desuden vurdere OM en graf overhovedet er umagen værd, eller om
+  en letvægts-tekst-tooltip ("n=12 · p25=3.400 · p75=4.900 · denne: 3.100 kr")
+  allerede leverer 80% af værdien til ~10% af arbejdet.
+- Arkitektur-spørgsmål spiken skal besvare: percentil-logikken bor i Python-
+  scraperen (`classify.py`), ikke i worker'en. Skal worker'en (a) replikere
+  percentil-forespørgslen i et nyt endpoint (fx `GET
+  /api/listings/:item_key/context`), eller (b) skal scraperen precompute og
+  gemme populations-konteksten pr. annonce? Afvej duplikeret logik vs. ekstra
+  lagring.
+
+**Berørte filer (kun hvis spiken giver grønt lys — spiken selv skriver kun
+en konklusion):** `worker/src/index.ts` (nyt context-endpoint), frontend/
+dashboard (klikbart badge + drilldown-panel), evt. `scraper/scraper/
+classify.py` (udstil populations-forespørgslen til genbrug). BEMÆRK:
+`price_history`-tabellen fra F5 er IKKE bygget og er IKKE nødvendig for
+fordelings-drilldownen — men den ville være en forudsætning, hvis vi senere
+vil vise en ægte pris-faldt-tidslinje pr. annonce (og selv da mangler vi
+realiserede salgspriser).
+
+**Acceptkriterier (spiken er færdig når vi kan svare på):**
+- Er der OVERHOVEDET en meningsfuld "pris over tid" vi kan vise, eller er det
+  ærlige svar udelukkende "fordeling bag klassifikationen"? (Forventet svar
+  ud fra research: kun fordeling — en Reverb-agtig sold-price-tidsserie
+  kræver realiserede salgsdata vi ikke indsamler.)
+- Hvad kan drilldownen konkret rendere GIVET kun `listings`-tabellen, og
+  hvilke felter mangler vi? (afklaret ovenfor: histogram + p25/p75 + denne-
+  markør + comparables; vi mangler sold-price og per-annonce-historik.)
+- Hvor skal beregningen leve (worker-endpoint der replikerer percentiler vs.
+  precomputed kontekst fra scraperen), og hvad er den mindste levedygtige
+  udgave (graf vs. tekst-tooltip)?
+- Konklusion: byg fuld graf / byg tekst-tooltip / drop featuren — med
+  begrundelse.
+
+**Risici:** Lav teknisk risiko (kun læse-visning af data vi har). Største
+risiko er at bygge en "prishistorik"-graf der IMPLICIT lover en tidsserie vi
+ikke har data til, og dermed vildleder brugeren til at tro et tal er en
+realiseret markedspris. Spiken mitigerer netop dette ved at fastlægge den
+ærlige framing før kode.
+
+---
+
+## F11: Spike: flere kilder (Gearloop, Thomann nypris-reference, Facebook)
+
+**Problem:** 5 nuværende kilder dækker EU/Norden-brugtmarkedet delvist. Tre
+kandidater er nævnt: Gearloop, en Thomann NYPRIS-reference (ikke B-Stock), og
+brugte Facebook-sider/grupper. De har VIDT forskellige risikoprofiler og skal
+vurderes hver for sig før byg — især Facebook, der ToS-mæssigt og teknisk er i
+en helt anden liga end de nuværende kilder.
+
+**Kernefund fra forudgående research (dokumentér i spiken):**
+
+- **Gearloop = gearloop.se** — "Sveriges marknadsplats för musikutrustning",
+  en svensk køb/salg-markedsplads for brugt musikudstyr med egne kategorier
+  for "PA & Live" og "Studio & Scenutrustning". Direkte relevant for
+  RCF ART/Yamaha DXR-segmentet og samme SE-marked som Blocket (afhentning i
+  SE, evt. fragt). Fremstår server-renderet HTML (kategori- og annonce-URL'er
+  er crawl-bare, SEK-priser). Ingen offentligt dokumenteret API fundet —
+  scrapeability skal verificeres empirisk, men risikoprofilen ligner de
+  eksisterende HTML-kilder (lav-medium). MEST LOVENDE kandidat.
+
+- **Thomann NYPRIS-reference** — Thomanns almindelige produktside (fx
+  `thomann.de/de/rcf_art_910_a.htm`) viser nyprisen i STATISK HTML (verificeret
+  2026-07-12: 579 € / UVP 679 € for ART 910-A, "Sofort lieferbar"). Modsat
+  B-Stock-URL'erne (som `thomann.py` allerede håndterer, og som 404'er når der
+  ikke er B-Stock på lager) er den almindelige produkt-URL STABIL og altid
+  til stede. Prisen kan parses med præcis samme teknik som `_fetch_price_dkk`
+  i den nuværende `thomann.py`. Lav teknisk risiko, men også lavere værdi:
+  nyprisen er et velkendt loft, ikke et kup.
+
+- **Facebook Marketplace/grupper** — MARKANT anden risikoprofil. Metas ToS
+  ("Automated Data Collection Terms") forbyder eksplicit scrapers/bots/
+  crawlers. Facebook kører aggressiv anti-automation: CAPTCHA, rate limiting,
+  JS-obfuskering, browser-fingerprinting, TLS/HTTP2-tjek og ML-baseret
+  bot-detektion. En californisk dom (Meta v. Bright Data, 2024) fandt at
+  scraping af OFFENTLIGE/udloggede data ikke i sig selv brød ToS — MEN
+  Marketplace/grupper kræver reelt login for at browse meningsfuldt, og dommen
+  skelnede netop mellem at omgå anti-bot på offentlige data (ok) og at
+  gennembryde en login-mur (ikke ok). Vores case falder på den forkerte side
+  af den skelnen. Dette er en juridisk OG teknisk risiko der ikke findes hos
+  de 5 nuværende kilder (som alle kan hentes udlogget).
+
+**Design (hvad spiken skal afklare pr. kilde):**
+- **Gearloop (undersøg FØRST):** Har siden et JSON-API eller `__NEXT_DATA__`/
+  serialiseret state? Er kategori-/søgeresultatet server-renderet med stabile
+  selectors? SEK-priser der kan genbruge eksisterende `to_dkk`? Volumen af
+  RCF/Yamaha-udbud lige nu? Paginering? `robots.txt`/ToS? Kan den passe ind i
+  den eksisterende kilde-kontrakt (`fetch(config, dry_run) -> list[raw]`,
+  `origin_country_code="SE"`)?
+- **Thomann nypris:** Bekræft at parsingen af `.price` virker på den
+  almindelige produktside (ikke kun B-Stock). Afklar ROLLEN — anbefaling:
+  brug den som et DISPLAY-ANKER / loft ("nypris: X kr") ved siden af
+  brugtannoncer, IKKE som input til percentil-historikken (nypriser ville
+  forurene den brugte fordeling og skæve klassifikationen). Kræver en lille
+  config-mapping model+gen → Thomann produkt-URL (håndtér varianter: 910A vs
+  910AX osv.). Skal den have sin egen tabel/visning adskilt fra `listings`
+  (à la `thomann_stock_state`)?
+- **Facebook:** Afklar ærligt om det overhovedet er teknisk/juridisk
+  forsvarligt for et personligt værktøj. Forventet konklusion (skal
+  bekræftes, ikke antages): MARKÉR SOM BEVIDST UDELUKKELSE med begrundelse —
+  ToS-forbud + login-mur + aggressiv anti-bot gør risiko/værdi-forholdet
+  uacceptabelt sammenlignet med de øvrige kilder. Brugeren kan i stedet bruge
+  Facebooks egne "gemte søgninger"/notifikationer manuelt.
+
+**Anbefalet rækkefølge:** (1) Gearloop — højest værdi, lavest risiko, udvider
+det SE-segment vi allerede kender fra Blocket. (2) Thomann nypris — triviel og
+lav risiko, men lav værdi (kun et referenceloft). (3) Facebook — undersøg kun
+nok til at DOKUMENTERE udelukkelsen; forfølg ikke.
+
+**Berørte filer (kun ved grønt lys — spiken selv skriver en konklusion pr.
+kilde):** `scraper/scraper/sources/gearloop.py` (ny), `sources/thomann.py`
+(eller ny `thomann_new.py` til nypris-reference), `config.yaml`,
+`monitor.py`/`main.py` (SOURCE_MODULES), `README.md`.
+
+**Acceptkriterier (spiken er færdig når vi kan svare på):**
+- Gearloop: statisk HTML eller SPA/API? Stabile selectors? SEK-priser?
+  RCF/Yamaha-volumen? ToS/robots ok? → byg-ja/nej med begrundelse.
+- Thomann nypris: virker parsing på den almindelige produktside? Klassifikations-
+  input eller kun display-anker? (anbefaling: kun anker) → skitse til
+  integration + model→URL-mapping.
+- Facebook: er ToS/teknisk risiko afklaret og dokumenteret? → klar ja/nej
+  (forventet: nej, bevidst udelukkelse).
+- Samlet: prioriteret rækkefølge for eventuel efterfølgende byg.
+
+**Risici:** Gearloop kan vise sig at være JS-renderet/API-beskyttet (afklares
+billigt i spiken). Thomann nypris kan friste til at blande ny- og brugtpriser
+i klassifikationen — hold dem adskilt. Facebook: reel konto-/juridisk risiko
+ved at forsøge — spiken skal netop STOPPE et forhastet byg her, ikke muliggøre
+det.

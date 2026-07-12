@@ -11,10 +11,14 @@
 ## Prioriteret rækkefølge (næste øverst)
 
 ```
-1. F6  Blandet par-alarm           WSJF 7.5  TODO
-2. F7  Per-kilde-kadence (rest)    WSJF 5.0  DELVIST
-3. F5  Prisfalds-detektion         WSJF 3.0  TODO
-4. F4  eBay.de som kilde           WSJF 1.9  TODO
+1. F6   Blandet par-alarm            WSJF 7.5  TODO
+2. F8   Mobil-sortering              WSJF 5.5  TODO
+3. F7   Per-kilde-kadence (rest)     WSJF 5.0  DELVIST
+4. F11  Spike: flere kilder          WSJF 4.3  TODO
+5. F10  Spike: prishistorik-drilldown WSJF 4.0 TODO
+6. F5   Prisfalds-detektion          WSJF 3.0  TODO
+7. F4   eBay.de som kilde            WSJF 1.9  TODO
+8. F9   Kategorisering af søgninger  WSJF 1.4  TODO
 ```
 
 ## Scoring-detaljer
@@ -23,25 +27,71 @@
 F6  Blandet par-alarm
     BV 7  TC 5  RR 3  CoD 15  Size 2  WSJF 7.5
 
+F8  Mobil-sortering
+    BV 5  TC 4  RR 2  CoD 11  Size 2  WSJF 5.5
+    Rent additiv frontend-fix i én fil (index.html): mobil kan i dag
+    slet ikke udløse sortering -- <thead>-knapperne er sr-only-klippet
+    for at undgå den fjernede vandrette scroll. Genbruger applySort()
+    1:1 via en native <select>. Lavt Size som F6/F7.
+
 F7  Per-kilde-kadence (rest)
     BV 4  TC 4  RR 2  CoD 10  Size 2  WSJF 5.0
     launchd-schedule (hver 2t) er allerede live siden 2026-07-08 --
     dette er kun resten: Kleinanzeigen/Blocket maks hver 4. time.
+
+F11 Spike: flere kilder (Gearloop/Thomann-nypris/FB)
+    BV 6  TC 3  RR 4  CoD 13  Size 3  WSJF 4.3
+    Spike, ikke byg. Gearloop = svensk brugt-musik-marketplace
+    (PA/Live-kategori), mest lovende + lavest risiko. Thomann-
+    nypris triviel men lav værdi (referenceloft). Facebook =
+    ventet bevidst UDELUKKELSE (ToS-forbud + login-mur + aggressiv
+    anti-bot -- helt anden risikoprofil end de 5 kilder). BV høj
+    fordi nye kilder tjener kernemålet direkte; Size lav (desk-
+    research + et par test-fetches).
+
+F10 Spike: prishistorik / klassifikations-drilldown
+    BV 3  TC 2  RR 3  CoD 8  Size 2  WSJF 4.0
+    Spike. Kernefund: ingen ægte "pris over tid" mulig -- hver
+    annonce er unik engangsvare, vi observerer aldrig realiserede
+    salgspriser. Det eneste med tidsdimension er FORDELINGEN bag
+    percentil-klassifikationen (som classify_dynamic allerede
+    beregner). Drilldown = histogram + p25/p75 + denne-markør +
+    comparables, ikke en SKU-tidsserie. Lav BV: forklarende polish,
+    finder ingen nye kup. Spiken skal afgøre graf vs. tekst-tooltip.
 
 F5  Prisfalds-detektion
     BV 6  TC 5  RR 4  CoD 15  Size 5  WSJF 3.0
 
 F4  eBay.de som kilde
     BV 7  TC 4  RR 4  CoD 15  Size 8  WSJF 1.9
+
+F9  Kategorisering af søgninger
+    BV 5  TC 2  RR 3  CoD 10  Size 7  WSJF 1.4
+    Cross-cutting (scraper + worker + frontend + TO skemamigreringer).
+    v1 er KUN organisering + tagging; percentil-klassifikationen er
+    allerede model+gen-partitioneret og røres ikke. Reelt synth-/
+    studie-scope (nye model-regex'er, nye tærskler, kilde-routing,
+    Thomann-kategori-URL'er) er en SEPARAT epic på størrelse med F4+
+    -- derfor højt Size og lav BV for selve v1-skiven. TC lav.
 ```
 
 ## Begrundelser (kort)
 
 - F6 øverst: ren efterbehandling af data vi allerede har, adresserer
   direkte slutmålet (910A-par <=6.500). Lavt Size.
+- F8 højt trods "kun UI": krydser 5.5 fordi den er billig (Size 2) og
+  fjerner en reel mobil-blocker -- sortering findes men er utilgængelig
+  på telefon. Ingen backend-risiko.
+- F11 over F10: nye kilder tjener acquisition-målet direkte, mens
+  drilldown er forklarende polish. Begge er spikes -- konklusionen kan
+  være "byg ikke" (specielt Facebook i F11).
 - F5 lavt trods god værdi: kræver genbesøgs-logik pr. kilde + ny tabel.
-- F4 sidst: størst job (API-nøgle, OAuth, nyt modul), overlapper
+- F4 næstsidst: størst job (API-nøgle, OAuth, nyt modul), overlapper
   delvist med F1/F2 (samme tyske/nordiske brugtmarked).
+- F9 sidst: største ikke-F4-job og en scope-fælde. v1 leverer kun
+  overblik/tagging; den værdi brugeren egentlig vil have (finde synth-
+  kup) ligger i en ubygget v2. Lav WSJF afspejler at prisen er høj og
+  den leverede værdi i v1-skiven er begrænset.
 
 ## Leveret
 

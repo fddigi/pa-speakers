@@ -52,6 +52,14 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y jq
 
+      - name: Install worker dependencies
+        # provision.sh runs `wrangler deploy` from worker/, which needs the
+        # actual dependency tree (hono, @libsql/client) on disk to bundle -
+        # without this, esbuild fails with "Could not resolve 'hono'" etc.
+        # ci.yml and deploy.yml both already do this; bootstrap.yml did not.
+        working-directory: worker
+        run: npm ci
+
       - name: Run infra/provision.sh
         env:
           TURSO_PLATFORM_TOKEN: ${{ secrets.TURSO_PLATFORM_TOKEN }}

@@ -216,11 +216,24 @@ provision_pages() {
 
   if gh api "repos/${repo_full_name}/pages" >/dev/null 2>&1; then
     log_info "GitHub Pages already enabled - skipping (idempotent)."
-  else
-    log_info "Enabling GitHub Pages (branch=main, path=/frontend)..."
-    gh api "repos/${repo_full_name}/pages" -X POST \
-      -f "source[branch]=main" -f "source[path]=/frontend" >/dev/null
+    return
   fi
+
+  # NOT attempted via GITHUB_TOKEN: confirmed (2026-07-12) that creating a
+  # repo's Pages site returns 403 "Resource not accessible by integration" for
+  # the workflow's own token NO MATTER what `permissions:` bootstrap.yml
+  # declares or how repo/org "workflow permissions" defaults are set - this
+  # specific admin action requires a real user/PAT credential. It also only
+  # supports source.path "/" or "/docs" (never an arbitrary folder like
+  # "/frontend" - confirmed via a real 422), which is why deploy.yml publishes
+  # via the Actions-based method (actions/deploy-pages) instead of classic
+  # branch+path serving. This is a one-time manual step - won't recur once done.
+  log_warn "GitHub Pages is not yet enabled for ${repo_full_name} and this" \
+    "script cannot enable it (GITHUB_TOKEN cannot create a repo's Pages site" \
+    "- confirmed 403 regardless of permissions). Enable it ONCE by hand:" \
+    "Settings -> Pages -> Build and deployment -> Source: \"GitHub Actions\"." \
+    "deploy.yml's deploy-pages job will publish frontend/ on every push to" \
+    "main once that's done - continuing with the rest of provisioning."
 }
 
 provision_healthcheck() {

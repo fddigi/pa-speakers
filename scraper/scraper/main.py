@@ -23,6 +23,7 @@ from scraper_core.turso_client import TursoClient
 
 from .pipeline import TURSO_SCHEMA, run_source
 from .rcf_config import load_config
+from .search_terms import load_search_terms
 from .sources import blocket, dba, kleinanzeigen, reverb, thomann
 
 logger = logging.getLogger(__name__)
@@ -49,18 +50,29 @@ def run() -> int:
             enabled_sources = [
                 name for name, enabled in rcf_config.get("sources", {}).items() if enabled
             ]
-            for name in enabled_sources:
-                module = SOURCE_MODULES.get(name)
-                if module is None:
-                    logger.warning("Unknown source configured: %s, skipping", name)
-                    continue
-                raw_count, changed = run_source(store, name, module.fetch, rcf_config)
-                total_raw += raw_count
-                total_changed += changed
 
             if settings.turso_configured:
                 with TursoClient(settings) as turso:
                     turso.execute(TURSO_SCHEMA)  # idempotent schema migration, not a data rewrite
+
+                    # Dynamic search terms ("ønskeseddel"): Turso is the source of
+                    # truth when configured, editable from the webapp - see
+                    # search_terms.py. Overwrites config.yaml's static list in-memory
+                    # only, so every source module's existing
+                    # `config["search_terms"]["primary"] + secondary` read keeps
+                    # working unchanged.
+                    dynamic_terms = load_search_terms(rcf_config, turso)
+                    rcf_config["search_terms"] = {"primary": dynamic_terms, "secondary": []}
+
+                    for name in enabled_sources:
+                        module = SOURCE_MODULES.get(name)
+                        if module is None:
+                            logger.warning("Unknown source configured: %s, skipping", name)
+                            continue
+                        raw_count, changed = run_source(store, name, module.fetch, rcf_config)
+                        total_raw += raw_count
+                        total_changed += changed
+
                     synced = sync_pending(store, turso)
                 logger.info(
                     "run complete: %d raw across %d source(s), %d new/changed, %d synced to Turso",
@@ -69,7 +81,18 @@ def run() -> int:
             else:
                 # Graceful fallback: no Turso credentials configured -> local-only mode.
                 # The scraper still runs fully (all five sources, dedup, classification)
-                # without any cloud account - see scraper-core's README.
+                # without any cloud account - see scraper-core's README. Search terms
+                # come from config.yaml's static list only (no dynamic ønskeseddel
+                # without Turso to store it in).
+                for name in enabled_sources:
+                    module = SOURCE_MODULES.get(name)
+                    if module is None:
+                        logger.warning("Unknown source configured: %s, skipping", name)
+                        continue
+                    raw_count, changed = run_source(store, name, module.fetch, rcf_config)
+                    total_raw += raw_count
+                    total_changed += changed
+
                 logger.warning(
                     "TURSO_DATABASE_URL/TURSO_AUTH_TOKEN not set - skipping Turso sync "
                     "(local-only mode). %d new/changed item(s) queued locally.",

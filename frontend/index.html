@@ -18,6 +18,16 @@
   <h1>RCF ART / Yamaha DXR PA-speakers</h1>
   <p>Logget ind som <span id="whoami">...</span> (<button id="logout">log ud</button>)</p>
 
+  <details id="search-terms-section">
+    <summary>Søgetermer (ønskeseddel)</summary>
+    <ul id="search-terms-list"></ul>
+    <form id="search-terms-form">
+      <input type="text" id="search-terms-input" placeholder="fx RCF ART 315" required />
+      <button type="submit">Tilføj</button>
+    </form>
+    <p id="search-terms-error" style="color: red"></p>
+  </details>
+
   <div class="controls">
     <select id="filter-classification">
       <option value="">Alle klassifikationer</option>
@@ -179,11 +189,73 @@
       window.location.href = "login.html";
     });
 
+    // Dynamic search terms ("ønskeseddel") - see search_terms.py/index.ts's
+    // /api/search-terms. Editing here is what the scraper's next run will
+    // actually search for, instead of requiring a config.yaml edit + redeploy.
+    async function loadSearchTerms() {
+      const errorEl = document.getElementById("search-terms-error");
+      errorEl.textContent = "";
+      const res = await fetch(`${API_BASE}/api/search-terms`, { headers: authHeaders() });
+      if (!res.ok) {
+        errorEl.textContent = "Kunne ikke hente søgetermer.";
+        return;
+      }
+      const { searchTerms } = await res.json();
+      const list = document.getElementById("search-terms-list");
+      list.innerHTML = "";
+      for (const row of searchTerms) {
+        const li = document.createElement("li");
+        li.appendChild(document.createTextNode(`${row.term} `));
+        const removeBtn = document.createElement("button");
+        removeBtn.textContent = "fjern";
+        removeBtn.addEventListener("click", () => removeSearchTerm(row.term));
+        li.appendChild(removeBtn);
+        list.appendChild(li);
+      }
+    }
+
+    async function removeSearchTerm(term) {
+      const errorEl = document.getElementById("search-terms-error");
+      errorEl.textContent = "";
+      const res = await fetch(`${API_BASE}/api/search-terms/${encodeURIComponent(term)}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        errorEl.textContent = "Kunne ikke fjerne søgeterm.";
+        return;
+      }
+      await loadSearchTerms();
+    }
+
+    document.getElementById("search-terms-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const input = document.getElementById("search-terms-input");
+      const errorEl = document.getElementById("search-terms-error");
+      errorEl.textContent = "";
+      const term = input.value.trim();
+      if (!term) return;
+
+      const res = await fetch(`${API_BASE}/api/search-terms`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ term }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        errorEl.textContent = data.error || "Kunne ikke tilføje søgeterm.";
+        return;
+      }
+      input.value = "";
+      await loadSearchTerms();
+    });
+
     (async () => {
       const me = await requireSession();
       if (!me) return;
       document.getElementById("whoami").textContent = me.username;
       await loadListings();
+      await loadSearchTerms();
     })();
   </script>
 </body>

@@ -19,7 +19,7 @@ app.use("*", async (c, next) => {
   const middleware = cors({
     origin: c.env.ALLOWED_ORIGIN,
     credentials: true,
-    allowMethods: ["GET", "POST", "OPTIONS"],
+    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
   });
   return middleware(c, next);
@@ -94,6 +94,44 @@ app.post("/logout", requireAuth, (c) => {
 app.get("/api/me", requireAuth, (c) => {
   const session = c.get("session");
   return c.json({ username: session.sub, role: session.role });
+});
+
+// --- Dynamic search terms ("ønskeseddel"), inspired by PLAGG's own webapp-
+// editable wishlist: this table is the scraper's source of truth for what to
+// search for once Turso is configured (see scraper/scraper/search_terms.py) -
+// editable here instead of requiring a config.yaml edit + redeploy. ---
+
+app.get("/api/search-terms", requireAuth, async (c) => {
+  const db = getDbClient(c.env);
+  const result = await db.execute(
+    "SELECT term, enabled, created_at FROM search_terms ORDER BY created_at DESC",
+  );
+  return c.json({ searchTerms: result.rows });
+});
+
+app.post("/api/search-terms", requireAuth, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const term = typeof body.term === "string" ? body.term.trim() : "";
+  if (!term) {
+    return c.json({ error: "term is required" }, 400);
+  }
+  const db = getDbClient(c.env);
+  await db.execute({
+    sql: `INSERT INTO search_terms (term, enabled, created_at) VALUES (?, 1, ?)
+          ON CONFLICT(term) DO UPDATE SET enabled = 1`,
+    args: [term, new Date().toISOString()],
+  });
+  return c.json({ ok: true, term });
+});
+
+app.delete("/api/search-terms/:term", requireAuth, async (c) => {
+  const term = c.req.param("term");
+  if (!term) {
+    return c.json({ error: "term is required" }, 400);
+  }
+  const db = getDbClient(c.env);
+  await db.execute({ sql: "DELETE FROM search_terms WHERE term = ?", args: [term] });
+  return c.json({ ok: true });
 });
 
 // --- Data endpoints against the `listings` table (matches

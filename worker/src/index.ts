@@ -20,7 +20,7 @@ app.use("*", async (c, next) => {
     origin: c.env.ALLOWED_ORIGIN,
     credentials: true,
     allowMethods: ["GET", "POST", "OPTIONS"],
-    allowHeaders: ["Content-Type"],
+    allowHeaders: ["Content-Type", "Authorization"],
   });
   return middleware(c, next);
 });
@@ -66,25 +66,24 @@ app.post("/login", async (c) => {
     c.env.SESSION_HMAC_SECRET,
   );
 
+  // Cookie kept as a fallback/legacy mechanism only - NOT the primary auth
+  // transport. Confirmed 2026-07-12: even with sameSite:"None" (required
+  // since frontend and Worker are different registrable domains), Safari's
+  // ITP blocks cross-site cookies entirely by default (not just SameSite=
+  // Strict/Lax - a blanket third-party-cookie block), and Chrome is moving
+  // the same direction. The primary mechanism is now the `token` returned
+  // below, stored in the frontend's localStorage and sent as a normal
+  // `Authorization: Bearer` header - not a cookie, so no browser cookie
+  // policy applies to it at all. See middleware.ts's requireAuth.
   setCookie(c, SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: true,
-    // MUST be "None", not "Strict"/"Lax": the frontend (fddigi.github.io) and
-    // this Worker (pa-speakers.proqual.workers.dev) are different registrable
-    // domains, so every API call from the frontend is a cross-SITE request.
-    // "Strict" cookies are NEVER sent cross-site, in any real browser, even
-    // with fetch's credentials:"include" - confirmed 2026-07-12: curl-based
-    // testing (no SameSite enforcement) falsely showed the full login flow
-    // working, but a real browser (and Playwright's Chromium) immediately
-    // got bounced back to login.html after a successful login, because
-    // index.html's very next request (GET /api/me) silently didn't send the
-    // cookie at all. "None" requires secure:true, already set above.
     sameSite: "None",
     path: "/",
     maxAge: maxAgeSeconds,
   });
 
-  return c.json({ ok: true, username, role: "admin" });
+  return c.json({ ok: true, username, role: "admin", token });
 });
 
 app.post("/logout", requireAuth, (c) => {

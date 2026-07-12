@@ -18,6 +18,17 @@
   <script>
     // No client-side password checks or shared API keys here - the Worker is the
     // only place credentials are ever verified. This form just relays them once.
+    //
+    // Session storage: the Worker returns a signed token in the JSON body (NOT
+    // just a cookie) - stored here in localStorage and sent back as a normal
+    // `Authorization: Bearer` header on every API call (see index.html). This
+    // is NOT a cookie, so no browser third-party-cookie policy applies to it.
+    // Needed because frontend (this GitHub Pages site) and the Worker API are
+    // on two different registrable domains - Safari's ITP blocks cross-site
+    // cookies entirely by default (confirmed 2026-07-12: login succeeded but
+    // every browser using ITP silently never sent the cookie back), and
+    // relying on a cookie for this two-domain setup is fragile long-term as
+    // more browsers restrict third-party cookies the same way.
     document.getElementById("login-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const username = document.getElementById("username").value;
@@ -29,14 +40,14 @@
         const res = await fetch(`${API_BASE}/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          credentials: "include", // required to receive/store the session cookie
           body: JSON.stringify({ username, password }),
         });
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
           errorEl.textContent = data.error || "Login mislykkedes.";
           return;
         }
+        localStorage.setItem("session_token", data.token);
         window.location.href = "index.html";
       } catch {
         errorEl.textContent = "Kunne ikke kontakte serveren.";

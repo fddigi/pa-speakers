@@ -52,13 +52,29 @@
   <script src="config.js"></script>
   <script>
     // Session lives in an HttpOnly cookie set by the Worker - this page never
-    // touches a password or API key, it just always sends credentials: 'include'.
+    // touches a password or API key, it just relays the stored session token.
+    // Auth uses a localStorage token sent as `Authorization: Bearer`, NOT a
+    // cookie - frontend (this GitHub Pages site) and the Worker API are on two
+    // different registrable domains, and Safari's ITP (and increasingly
+    // Chrome) blocks cross-site cookies entirely by default regardless of
+    // SameSite. See login.html's comment for the full explanation.
     const CLASS_COLORS = { "GODT KØB": "#1b7a3d", "FAIR": "#8a6d00", "OVERPRISET": "#a12222", "UKENDT": "#666" };
     let allListings = [];
 
+    function authHeaders() {
+      const token = localStorage.getItem("session_token");
+      return token ? { Authorization: `Bearer ${token}` } : {};
+    }
+
     async function requireSession() {
-      const res = await fetch(`${API_BASE}/api/me`, { credentials: "include" });
+      const token = localStorage.getItem("session_token");
+      if (!token) {
+        window.location.href = "login.html";
+        return null;
+      }
+      const res = await fetch(`${API_BASE}/api/me`, { headers: authHeaders() });
       if (!res.ok) {
+        localStorage.removeItem("session_token");
         window.location.href = "login.html";
         return null;
       }
@@ -70,7 +86,7 @@
       const params = new URLSearchParams();
       if (classification) params.set("classification", classification);
 
-      const res = await fetch(`${API_BASE}/api/listings?${params}`, { credentials: "include" });
+      const res = await fetch(`${API_BASE}/api/listings?${params}`, { headers: authHeaders() });
       if (!res.ok) {
         document.getElementById("error").textContent = "Kunne ikke hente data.";
         return;
@@ -158,7 +174,8 @@
     document.getElementById("reload").addEventListener("click", loadListings);
 
     document.getElementById("logout").addEventListener("click", async () => {
-      await fetch(`${API_BASE}/logout`, { method: "POST", credentials: "include" });
+      await fetch(`${API_BASE}/logout`, { method: "POST", headers: authHeaders() });
+      localStorage.removeItem("session_token");
       window.location.href = "login.html";
     });
 

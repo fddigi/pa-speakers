@@ -152,14 +152,20 @@ provision_worker() {
   kv_id="$(kv_lookup_id_by_title "$kv_title")"
   if [[ -z "$kv_id" ]]; then
     log_info "No existing KV namespace named '${kv_title}' - creating one..."
-    # NOTE: `wrangler kv namespace create RATE_LIMIT_KV` (no --title) would name
-    # it just "RATE_LIMIT_KV" - no project prefix - so our own reuse-lookup
-    # above would never find it again on a future re-run. --title fixes that.
-    # We deliberately do NOT parse `create`'s human-readable stdout for the id
-    # (it can contain non-interactive-fallback prompt text that breaks naive
-    # grep parsing in CI) - instead re-run the same reliable list|jq lookup
-    # used for the reuse-check above, now that the namespace exists.
-    (cd "${REPO_ROOT}/worker" && wrangler kv namespace create RATE_LIMIT_KV --title "$kv_title") >/dev/null
+    # NOTE: `wrangler kv namespace create <namespace>` takes the desired title as
+    # a POSITIONAL argument, not a --title flag - `wrangler kv namespace create
+    # --help` (4.110.0) confirms there is no --title flag at all; passing one
+    # fails fast with "Unknown argument: title" (found 2026-07-12, right after
+    # pinning wrangler for a different reason - flags are not stable across
+    # versions, verify against the exact pinned version, don't assume). Passing
+    # just "RATE_LIMIT_KV" (no project prefix) would name it "RATE_LIMIT_KV" -
+    # no prefix - so our own reuse-lookup above would never find it again on a
+    # future re-run; passing the full prefixed title as the positional arg fixes
+    # that. We deliberately do NOT parse `create`'s human-readable stdout for the
+    # id (it can contain non-interactive-fallback prompt text that breaks naive
+    # grep parsing in CI) - instead re-run the same reliable list|jq lookup used
+    # for the reuse-check above, now that the namespace exists.
+    (cd "${REPO_ROOT}/worker" && wrangler kv namespace create "$kv_title") >/dev/null
     kv_id="$(kv_lookup_id_by_title "$kv_title")"
   else
     log_info "Found existing KV namespace '${kv_title}' (id=${kv_id}) - reusing (idempotent)."

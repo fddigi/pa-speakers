@@ -278,7 +278,21 @@
     @media (max-width: 640px) {
       .table-scroll { overflow-x: visible; }
       table, thead, tbody, tr, td { display: block; width: 100%; }
-      thead { position: absolute; left: -9999px; } /* keep for screen readers' table semantics, hide visually */
+      /* Standard visually-hidden technique (not off-screen positioning, which
+         can inflate the document's scrollable width) - keeps <thead> in the
+         accessibility tree for screen readers' table semantics while hiding
+         it visually in favor of the data-label cards below. */
+      thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
       tbody tr {
         border: 1px solid var(--border);
         border-radius: var(--radius);

@@ -69,7 +69,17 @@ app.post("/login", async (c) => {
   setCookie(c, SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: true,
-    sameSite: "Strict",
+    // MUST be "None", not "Strict"/"Lax": the frontend (fddigi.github.io) and
+    // this Worker (pa-speakers.proqual.workers.dev) are different registrable
+    // domains, so every API call from the frontend is a cross-SITE request.
+    // "Strict" cookies are NEVER sent cross-site, in any real browser, even
+    // with fetch's credentials:"include" - confirmed 2026-07-12: curl-based
+    // testing (no SameSite enforcement) falsely showed the full login flow
+    // working, but a real browser (and Playwright's Chromium) immediately
+    // got bounced back to login.html after a successful login, because
+    // index.html's very next request (GET /api/me) silently didn't send the
+    // cookie at all. "None" requires secure:true, already set above.
+    sameSite: "None",
     path: "/",
     maxAge: maxAgeSeconds,
   });

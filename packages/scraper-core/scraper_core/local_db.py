@@ -79,9 +79,14 @@ class LocalStore:
         exactly one delta-sync row (never a full-table rewrite). Returns True if the
         item was new/changed, False if it was an unchanged repeat.
 
-        `hash_payload` lets callers exclude volatile fields (e.g. a `scraped_at`
-        timestamp that changes every run) from the change-detection hash while still
-        writing them as part of the synced `payload`. Defaults to `payload` itself.
+        `hash_payload` lets callers exclude volatile fields from the change-detection
+        hash while still writing them as part of the synced `payload`. Defaults to
+        `payload` itself. Rule of thumb: exclude any field that reflects COLLECTION
+        metadata (when it was scraped, how, which search found it - e.g. a
+        `scraped_at` timestamp, or a `search_term`/`matched_query` field that can
+        legitimately differ between runs for the same unchanged item) rather than
+        the scraped CONTENT itself. Forgetting this causes spurious re-queues for
+        items that didn't actually change - not just for timestamps.
         """
         new_hash = content_hash(hash_payload if hash_payload is not None else payload)
         row = self._conn.execute(

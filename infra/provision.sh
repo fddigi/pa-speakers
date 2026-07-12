@@ -118,6 +118,16 @@ provision_turso_database() {
   fi
 }
 
+kv_lookup_id_by_title() {
+  # kv_lookup_id_by_title <title> -> prints the namespace id, or nothing if
+  # not found. The one reliable way to get a KV namespace id: `wrangler kv
+  # namespace list` is JSON and stable across wrangler versions, unlike
+  # `create`'s human-readable stdout (which can contain non-interactive
+  # "Using fallback value..." prompt text in CI, breaking naive grep parsing).
+  local title="$1"
+  wrangler kv namespace list 2>/dev/null | jq -r --arg t "$title" '.[] | select(.title == $t) | .id' | head -n1
+}
+
 provision_worker() {
   log_step "2/5 Cloudflare Worker"
   local wrangler_toml="${REPO_ROOT}/worker/wrangler.toml"
@@ -139,21 +149,27 @@ provision_worker() {
 
   log_info "Ensuring KV namespace for RATE_LIMIT_KV exists..."
   local kv_title="${PROJECT_NAME}-RATE_LIMIT_KV" kv_id
-  kv_id="$(wrangler kv namespace list 2>/dev/null | jq -r --arg title "$kv_title" '.[] | select(.title == $title) | .id' | head -n1)"
+  kv_id="$(kv_lookup_id_by_title "$kv_title")"
   if [[ -z "$kv_id" ]]; then
     log_info "No existing KV namespace named '${kv_title}' - creating one..."
-    kv_id="$(cd "${REPO_ROOT}/worker" && wrangler kv namespace create RATE_LIMIT_KV 2>&1 \
-      | grep -oE 'id = "[a-f0-9]+"' | head -n1 | grep -oE '[a-f0-9]+')"
+    # NOTE: `wrangler kv namespace create RATE_LIMIT_KV` (no --title) would name
+    # it just "RATE_LIMIT_KV" - no project prefix - so our own reuse-lookup
+    # above would never find it again on a future re-run. --title fixes that.
+    # We deliberately do NOT parse `create`'s human-readable stdout for the id
+    # (it can contain non-interactive-fallback prompt text that breaks naive
+    # grep parsing in CI) - instead re-run the same reliable list|jq lookup
+    # used for the reuse-check above, now that the namespace exists.
+    (cd "${REPO_ROOT}/worker" && wrangler kv namespace create RATE_LIMIT_KV --title "$kv_title") >/dev/null
+    kv_id="$(kv_lookup_id_by_title "$kv_title")"
   else
     log_info "Found existing KV namespace '${kv_title}' (id=${kv_id}) - reusing (idempotent)."
   fi
   if [[ -z "$kv_id" ]]; then
-    log_warn "Could not determine KV namespace id automatically - wrangler deploy will likely fail." \
-      "Check manually with: wrangler kv namespace list"
-  else
-    sed -i.bak -e "s|REPLACE_WITH_KV_NAMESPACE_ID|${kv_id}|" "$wrangler_toml"
-    rm -f "${wrangler_toml}.bak"
+    log_error "Could not create/find KV namespace '${kv_title}' - see wrangler output above."
+    exit 1
   fi
+  sed -i.bak -e "s|REPLACE_WITH_KV_NAMESPACE_ID|${kv_id}|" "$wrangler_toml"
+  rm -f "${wrangler_toml}.bak"
 
   log_info "Deploying Worker '${PROJECT_NAME}' via wrangler..."
   (cd "${REPO_ROOT}/worker" && wrangler deploy)

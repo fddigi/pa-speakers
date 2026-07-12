@@ -43,7 +43,7 @@ jobs:
 
       - name: Install wrangler + jq
         run: |
-          npm install -g wrangler
+          npm install -g wrangler@4.110.0  # pinned: unpinned wrangler drifted CLI output format mid-migration
           sudo apt-get update -y
           sudo apt-get install -y jq
 

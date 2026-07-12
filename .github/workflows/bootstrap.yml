@@ -34,6 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write  # provision.sh commits generated wrangler.toml/config.js back to main
+      pages: write     # provision.sh enables GitHub Pages via `gh api repos/.../pages`
     steps:
       - uses: actions/checkout@v4
 

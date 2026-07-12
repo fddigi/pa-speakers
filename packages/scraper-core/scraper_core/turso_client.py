@@ -23,8 +23,16 @@ class TursoClient:
                 "Callers should check `settings.turso_configured` first and fall back to "
                 "local-only mode instead of constructing this class."
             )
+        # Force HTTP mode (https://) instead of the SDK's default WebSocket/Hrana
+        # mode (libsql://) - confirmed 2026-07-12 that the default WS mode fails
+        # with `aiohttp.client_exceptions.WSServerHandshakeError: 400, message=
+        # 'Invalid response status'` against a real Turso database from this
+        # network/environment, while HTTP mode connects and executes fine. This
+        # script is a short-lived periodic process (launchd-triggered) - it has
+        # no need for Hrana's persistent-connection/streaming benefits anyway.
+        http_url = settings.turso_database_url.replace("libsql://", "https://", 1)
         self._client = libsql_client.create_client_sync(
-            url=settings.turso_database_url,
+            url=http_url,
             auth_token=settings.turso_auth_token,
         )
 

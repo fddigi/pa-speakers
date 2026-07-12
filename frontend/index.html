@@ -15,7 +15,7 @@
       --accent-hover: #1d4ed8;
       --good: #15803d;
       --good-bg: #dcfce7;
-      --fair: #92660a;
+      --fair: #7a5806;
       --fair-bg: #fef3c7;
       --bad: #b91c1c;
       --bad-bg: #fee2e2;
@@ -35,7 +35,7 @@
         --accent-hover: #7ba3f2;
         --good: #4ade80;
         --good-bg: #14301f;
-        --fair: #facc15;
+        --fair: #fbbf24;
         --fair-bg: #33280a;
         --bad: #f87171;
         --bad-bg: #3a1414;
@@ -81,7 +81,7 @@
       color: var(--text-muted);
     }
 
-    button, input[type=text], select {
+    button, input[type=text] {
       font: inherit;
       font-size: 0.85rem;
       border-radius: 6px;
@@ -96,6 +96,7 @@
       transition: background-color 0.12s ease, border-color 0.12s ease;
     }
     button:hover { border-color: var(--accent); color: var(--accent); }
+    button:disabled { cursor: default; opacity: 0.6; border-color: var(--border); color: var(--text-muted); }
     button.primary {
       background: var(--accent);
       border-color: var(--accent);
@@ -105,7 +106,7 @@
     button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
     button.subtle { background: transparent; border-color: transparent; color: var(--text-muted); padding: 4px 8px; }
     button.subtle:hover { color: var(--bad); }
-    input[type=text]:focus, select:focus, button:focus-visible {
+    input[type=text]:focus, button:focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 1px;
     }
@@ -118,13 +119,17 @@
       margin-bottom: 16px;
     }
 
-    /* Stats bar */
-    .stats {
+    /* Stats bar - chips double as classification filters (click to toggle) */
+    .stats-header {
       display: flex;
+      align-items: center;
+      justify-content: space-between;
       flex-wrap: wrap;
-      gap: 10px;
+      gap: 8px;
       padding: 14px 16px;
     }
+    .stats { display: flex; flex-wrap: wrap; gap: 10px; }
+    .last-updated { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
     .stat {
       display: flex;
       align-items: baseline;
@@ -135,12 +140,15 @@
       font-weight: 600;
       background: var(--unknown-bg);
       color: var(--unknown);
+      border: 2px solid transparent;
     }
     .stat strong { font-size: 0.95rem; }
-    .stat.total { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+    .stat.total { background: var(--bg); color: var(--text); border: 2px solid var(--border); }
     .stat[data-class="GODT KØB"] { background: var(--good-bg); color: var(--good); }
     .stat[data-class="FAIR"] { background: var(--fair-bg); color: var(--fair); }
     .stat[data-class="OVERPRISET"] { background: var(--bad-bg); color: var(--bad); }
+    .stat.active { border-color: currentColor; }
+    .stat:hover { filter: brightness(0.97); }
 
     /* Search terms */
     details#search-terms-section summary {
@@ -163,6 +171,7 @@
     }
     details#search-terms-section[open] summary::before { transform: rotate(90deg); }
     .search-terms-body { padding: 0 16px 16px; }
+    .hint-text { font-size: 0.8rem; color: var(--text-muted); margin: -4px 0 12px; }
     .term-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; padding: 0; list-style: none; }
     .term-chips li {
       display: flex;
@@ -207,20 +216,31 @@
       position: sticky;
       top: 0;
       background: var(--surface);
-      text-align: left;
-      padding: 10px 14px;
+      padding: 0;
       font-weight: 600;
-      color: var(--text-muted);
       border-bottom: 1px solid var(--border);
-      cursor: pointer;
-      user-select: none;
     }
-    thead th:hover { color: var(--accent); }
+    thead th button {
+      all: unset;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      width: 100%;
+      padding: 10px 14px;
+      cursor: pointer;
+      color: var(--text-muted);
+      font: inherit;
+      font-weight: 600;
+    }
+    thead th button:hover { color: var(--accent); }
+    thead th button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .sort-indicator { font-size: 0.65rem; }
     tbody td { padding: 9px 14px; border-bottom: 1px solid var(--border); }
     tbody tr:hover { background: var(--bg); }
     tbody tr:last-child td { border-bottom: none; }
-    a.row-link { color: var(--accent); text-decoration: none; font-weight: 600; }
-    a.row-link:hover { text-decoration: underline; }
+    a.row-link { color: var(--text); text-decoration: none; }
+    a.row-link:hover { color: var(--accent); text-decoration: underline; }
 
     .badge {
       display: inline-flex;
@@ -236,10 +256,60 @@
     .badge[data-class="FAIR"] { background: var(--fair-bg); color: var(--fair); }
     .badge[data-class="OVERPRISET"] { background: var(--bad-bg); color: var(--bad); }
     .badge[data-class="UKENDT"] { background: var(--unknown-bg); color: var(--unknown); }
+    .new-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      background: var(--accent);
+      color: #fff;
+      vertical-align: middle;
+    }
 
     #count-line { padding: 12px 16px; font-size: 0.8rem; color: var(--text-muted); }
     .error-text { color: var(--bad); font-size: 0.85rem; padding: 0 16px; }
     .empty-state { padding: 40px 16px; text-align: center; color: var(--text-muted); }
+
+    /* Mobile: table -> stacked cards. Each <tr> becomes a card, each <td> a
+       labelled row within it (data-label supplies the label via ::before) -
+       keeps price/link reachable without horizontal scrolling. */
+    @media (max-width: 640px) {
+      .table-scroll { overflow-x: visible; }
+      table, thead, tbody, tr, td { display: block; width: 100%; }
+      thead { position: absolute; left: -9999px; } /* keep for screen readers' table semantics, hide visually */
+      tbody tr {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        margin: 10px;
+        padding: 4px 12px;
+        background: var(--surface);
+      }
+      tbody tr:hover { background: var(--surface); }
+      tbody td {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+        padding: 7px 0;
+        border-bottom: 1px dashed var(--border);
+        white-space: normal;
+        text-align: right;
+      }
+      tbody tr td:last-child { border-bottom: none; }
+      tbody td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: var(--text-muted);
+        text-align: left;
+        flex-shrink: 0;
+      }
+      tbody td[data-label="Klassifikation"] { justify-content: flex-start; }
+      tbody td[data-label="Klassifikation"]::before { display: none; }
+      tbody td[data-label="Titel"] { text-align: left; }
+      .empty-state { text-align: center; display: block; }
+    }
   </style>
 </head>
 <body>
@@ -253,12 +323,19 @@
     </header>
 
     <div class="card">
-      <div class="stats" id="stats-bar"></div>
+      <div class="stats-header">
+        <div class="stats" id="stats-bar"></div>
+        <span id="last-updated" class="last-updated"></span>
+      </div>
     </div>
 
     <details class="card" id="search-terms-section">
-      <summary>Søgetermer (ønskeseddel)</summary>
+      <summary>Hvad scraperen leder efter</summary>
       <div class="search-terms-body">
+        <p class="hint-text">
+          Dette er IKKE et filter for listen nedenfor - det styrer hvad scraperen
+          søger efter på markedspladserne ved næste kørsel.
+        </p>
         <ul class="term-chips" id="search-terms-list"></ul>
         <form id="search-terms-form">
           <input type="text" id="search-terms-input" placeholder="fx RCF ART 315" required />
@@ -270,14 +347,7 @@
 
     <div class="card">
       <div class="controls">
-        <select id="filter-classification">
-          <option value="">Alle klassifikationer</option>
-          <option value="GODT KØB">GODT KØB</option>
-          <option value="FAIR">FAIR</option>
-          <option value="OVERPRISET">OVERPRISET</option>
-          <option value="UKENDT">UKENDT</option>
-        </select>
-        <input type="text" id="filter-search" placeholder="Søg i titel/model..." />
+        <input type="text" id="filter-search" placeholder="Filtrér liste efter titel/model..." />
         <button id="reload">Genindlæs</button>
       </div>
 
@@ -285,15 +355,30 @@
         <table id="listings-table">
           <thead>
             <tr>
-              <th data-key="classification">Klassifikation</th>
-              <th data-key="model">Model</th>
-              <th data-key="gen">Gen</th>
-              <th data-key="quantity">Antal</th>
-              <th data-key="price_per_unit_dkk" data-numeric="true">Pris/enhed</th>
-              <th data-key="source">Kilde</th>
-              <th data-key="title">Titel</th>
-              <th data-key="first_seen">Først set</th>
-              <th>Link</th>
+              <th data-key="classification" scope="col">
+                <button type="button">Klassifikation<span class="sort-indicator"></span></button>
+              </th>
+              <th data-key="model" scope="col">
+                <button type="button">Model<span class="sort-indicator"></span></button>
+              </th>
+              <th data-key="gen" scope="col">
+                <button type="button">Gen<span class="sort-indicator"></span></button>
+              </th>
+              <th data-key="quantity" data-numeric="true" scope="col">
+                <button type="button">Antal<span class="sort-indicator"></span></button>
+              </th>
+              <th data-key="price_per_unit_dkk" data-numeric="true" scope="col">
+                <button type="button">Pris/enhed<span class="sort-indicator"></span></button>
+              </th>
+              <th data-key="source" scope="col">
+                <button type="button">Kilde<span class="sort-indicator"></span></button>
+              </th>
+              <th data-key="title" scope="col">
+                <button type="button">Titel<span class="sort-indicator"></span></button>
+              </th>
+              <th data-key="first_seen" scope="col">
+                <button type="button">Først set<span class="sort-indicator"></span></button>
+              </th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -314,7 +399,10 @@
     // Chrome) blocks cross-site cookies entirely by default regardless of
     // SameSite. See login.html's comment for the full explanation.
     const CLASSIFICATIONS = ["GODT KØB", "FAIR", "OVERPRISET", "UKENDT"];
+    const CLASS_RANK = { "GODT KØB": 0, "FAIR": 1, "OVERPRISET": 2, "UKENDT": 3 };
     let allListings = [];
+    let activeClassFilter = null; // classification chip filter (client-side, no refetch)
+    let sortKey = null, sortAsc = true; // null = default combined sort (classification, then newest)
 
     function authHeaders() {
       const token = localStorage.getItem("session_token");
@@ -337,37 +425,114 @@
     }
 
     async function loadListings() {
-      const classification = document.getElementById("filter-classification").value;
-      const params = new URLSearchParams();
-      if (classification) params.set("classification", classification);
+      const reloadBtn = document.getElementById("reload");
+      reloadBtn.disabled = true;
+      reloadBtn.textContent = "Henter...";
 
-      const res = await fetch(`${API_BASE}/api/listings?${params}`, { headers: authHeaders() });
+      // Always fetches the full set - classification filtering happens
+      // client-side via the stats chips (see renderTable), so toggling a
+      // filter never needs a refetch and never loses the current sort.
+      const res = await fetch(`${API_BASE}/api/listings`, { headers: authHeaders() });
+
+      reloadBtn.disabled = false;
+      reloadBtn.textContent = "Genindlæs";
+
       if (!res.ok) {
         document.getElementById("error").textContent = "Kunne ikke hente data.";
         return;
       }
       const { listings } = await res.json();
       allListings = listings;
+      applySort();
       renderStats();
+      renderLastUpdated();
       renderTable();
+    }
+
+    function applySort() {
+      if (sortKey) {
+        const th = document.querySelector(`#listings-table th[data-key="${sortKey}"]`);
+        const numeric = th?.dataset.numeric === "true";
+        allListings.sort((a, b) => {
+          const av = a[sortKey], bv = b[sortKey];
+          if (numeric) return sortAsc ? (av ?? 0) - (bv ?? 0) : (bv ?? 0) - (av ?? 0);
+          return sortAsc
+            ? String(av ?? "").localeCompare(String(bv ?? ""))
+            : String(bv ?? "").localeCompare(String(av ?? ""));
+        });
+      } else {
+        // Default: best classification first, newest within each group -
+        // the point of this tool is surfacing GODT KØB, not server order.
+        allListings.sort((a, b) => {
+          const rankA = CLASS_RANK[a.classification ?? "UKENDT"] ?? 99;
+          const rankB = CLASS_RANK[b.classification ?? "UKENDT"] ?? 99;
+          if (rankA !== rankB) return rankA - rankB;
+          return String(b.first_seen ?? "").localeCompare(String(a.first_seen ?? ""));
+        });
+      }
+      updateSortIndicators();
+    }
+
+    function updateSortIndicators() {
+      document.querySelectorAll("#listings-table th[data-key]").forEach((th) => {
+        const indicator = th.querySelector(".sort-indicator");
+        if (th.dataset.key === sortKey) {
+          th.setAttribute("aria-sort", sortAsc ? "ascending" : "descending");
+          indicator.textContent = sortAsc ? "▲" : "▼";
+        } else {
+          th.removeAttribute("aria-sort");
+          indicator.textContent = "";
+        }
+      });
+    }
+
+    function isRecent(firstSeen) {
+      if (!firstSeen) return false;
+      return Date.now() - new Date(firstSeen).getTime() < 24 * 60 * 60 * 1000;
+    }
+
+    function renderLastUpdated() {
+      const el = document.getElementById("last-updated");
+      if (allListings.length === 0) {
+        el.textContent = "";
+        return;
+      }
+      const newest = allListings.reduce(
+        (max, row) => ((row.first_seen ?? "") > max ? row.first_seen : max),
+        allListings[0].first_seen ?? "",
+      );
+      el.textContent = `Nyeste fund: ${newest.slice(0, 16).replace("T", " ")}`;
     }
 
     function renderStats() {
       const bar = document.getElementById("stats-bar");
       bar.innerHTML = "";
 
-      const total = document.createElement("span");
-      total.className = "stat total";
+      const total = document.createElement("button");
+      total.type = "button";
+      total.className = "stat total" + (activeClassFilter === null ? " active" : "");
       total.innerHTML = `<strong>${allListings.length}</strong> annoncer i alt`;
+      total.addEventListener("click", () => {
+        activeClassFilter = null;
+        renderStats();
+        renderTable();
+      });
       bar.appendChild(total);
 
       for (const cls of CLASSIFICATIONS) {
         const count = allListings.filter((row) => (row.classification ?? "UKENDT") === cls).length;
         if (count === 0) continue;
-        const stat = document.createElement("span");
-        stat.className = "stat";
+        const stat = document.createElement("button");
+        stat.type = "button";
+        stat.className = "stat" + (activeClassFilter === cls ? " active" : "");
         stat.dataset.class = cls;
         stat.innerHTML = `<strong>${count}</strong> ${cls}`;
+        stat.setAttribute("aria-pressed", String(activeClassFilter === cls));
+        stat.addEventListener("click", () => {
+          activeClassFilter = activeClassFilter === cls ? null : cls;
+          renderStats();
+          renderTable();
+        });
         bar.appendChild(stat);
       }
     }
@@ -386,6 +551,7 @@
       tbody.innerHTML = "";
 
       const filtered = allListings.filter((row) => {
+        if (activeClassFilter && (row.classification ?? "UKENDT") !== activeClassFilter) return false;
         if (!search) return true;
         const haystack = `${row.title ?? ""} ${row.model ?? ""}`.toLowerCase();
         return haystack.includes(search);
@@ -394,7 +560,7 @@
       if (filtered.length === 0) {
         const tr = document.createElement("tr");
         const td = document.createElement("td");
-        td.colSpan = 9;
+        td.colSpan = 8;
         td.className = "empty-state";
         td.textContent = allListings.length === 0 ? "Ingen annoncer endnu." : "Ingen annoncer matcher filteret.";
         tr.appendChild(td);
@@ -408,34 +574,50 @@
         const classification = row.classification ?? "UKENDT";
 
         const classCell = document.createElement("td");
+        classCell.dataset.label = "Klassifikation";
         classCell.appendChild(classificationBadge(classification));
+        if (isRecent(row.first_seen)) {
+          const newBadge = document.createElement("span");
+          newBadge.className = "new-badge";
+          newBadge.textContent = "NY";
+          classCell.appendChild(newBadge);
+        }
         tr.appendChild(classCell);
 
         const priceStr = row.price_per_unit_dkk != null ? `${Math.round(row.price_per_unit_dkk)} kr` : "?";
-        const values = [
-          (row.model ?? "?").toUpperCase(),
-          row.gen ?? "uoplyst",
-          row.quantity ?? 1,
-          priceStr,
-          row.source ?? "",
-          row.title ?? "",
-          (row.first_seen ?? "").slice(0, 16).replace("T", " "),
+        const cellDefs = [
+          ["Model", (row.model ?? "?").toUpperCase()],
+          ["Gen", row.gen ?? "uoplyst"],
+          ["Antal", row.quantity ?? 1],
+          ["Pris/enhed", priceStr],
+          ["Kilde", row.source ?? ""],
         ];
-        for (const value of values) {
+        for (const [label, value] of cellDefs) {
           const cell = document.createElement("td");
+          cell.dataset.label = label;
           cell.textContent = value; // textContent, not innerHTML - avoids XSS from scraped content
           tr.appendChild(cell);
         }
 
-        const linkCell = document.createElement("td");
+        // Title is the primary action (opens the listing) - critique found the
+        // separate far-right "Link" column buried the one thing users actually
+        // want to do with an interesting row, and it was unreachable at all on
+        // mobile without horizontal scrolling.
+        const titleCell = document.createElement("td");
+        titleCell.dataset.label = "Titel";
         const link = document.createElement("a");
         link.className = "row-link";
         link.href = row.url ?? "#";
         link.target = "_blank";
         link.rel = "noopener";
-        link.textContent = "Se annonce →";
-        linkCell.appendChild(link);
-        tr.appendChild(linkCell);
+        link.textContent = row.title ?? "";
+        titleCell.appendChild(link);
+        tr.appendChild(titleCell);
+
+        const seenCell = document.createElement("td");
+        seenCell.dataset.label = "Først set";
+        seenCell.textContent = (row.first_seen ?? "").slice(0, 16).replace("T", " ");
+        tr.appendChild(seenCell);
 
         tbody.appendChild(tr);
       }
@@ -443,25 +625,16 @@
       document.getElementById("count-line").textContent = `${filtered.length} af ${allListings.length} annoncer vist`;
     }
 
-    let sortKey = null, sortAsc = true;
     document.querySelectorAll("#listings-table th[data-key]").forEach((th) => {
-      th.addEventListener("click", () => {
+      th.querySelector("button").addEventListener("click", () => {
         const key = th.dataset.key;
-        const numeric = th.dataset.numeric === "true";
         sortAsc = sortKey === key ? !sortAsc : true;
         sortKey = key;
-        allListings.sort((a, b) => {
-          const av = a[key], bv = b[key];
-          if (numeric) return sortAsc ? (av ?? 0) - (bv ?? 0) : (bv ?? 0) - (av ?? 0);
-          return sortAsc
-            ? String(av ?? "").localeCompare(String(bv ?? ""))
-            : String(bv ?? "").localeCompare(String(av ?? ""));
-        });
+        applySort();
         renderTable();
       });
     });
 
-    document.getElementById("filter-classification").addEventListener("change", loadListings);
     document.getElementById("filter-search").addEventListener("input", renderTable);
     document.getElementById("reload").addEventListener("click", loadListings);
 

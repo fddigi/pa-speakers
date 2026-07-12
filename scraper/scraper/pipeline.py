@@ -64,7 +64,9 @@ ON CONFLICT(item_key) DO UPDATE SET
 """
 
 
-def make_item_key(source: str, url: str | None, title: str | None = None, price_dkk: float | None = None) -> str:
+def make_item_key(
+    source: str, url: str | None, title: str | None = None, price_dkk: float | None = None
+) -> str:
     """Ported unchanged from PA SPEAKERS' db.py:make_id()."""
     import hashlib
 
@@ -130,7 +132,9 @@ def run_source(
                 origin_country_code=raw.get("origin_country_code"),
                 import_costs=config.get("import_costs"),
             )
-            item_key = make_item_key(source_name, listing.get("url"), listing.get("title"), listing.get("price_dkk"))
+            item_key = make_item_key(
+                source_name, listing.get("url"), listing.get("title"), listing.get("price_dkk")
+            )
             first_seen = datetime.datetime.now(datetime.UTC).isoformat()
 
             # exclude_id=item_key: without this, an ad that matches multiple search
@@ -140,7 +144,8 @@ def run_source(
             # re-sync. Found 2026-07-12 via a Blocket ad queued 3x in one run for
             # what should have been 1 insert + 0 real changes.
             classification, method = classify.classify_dynamic(
-                listing, store.connection, config["thresholds"], config["mk1_beater"], exclude_id=item_key
+                listing, store.connection, config["thresholds"], config["mk1_beater"],
+                exclude_id=item_key,
             )
 
             payload = {
@@ -175,7 +180,9 @@ def run_source(
                 # matched 3 terms and was queued 3x for what should have been one
                 # insert + zero real content changes, since nothing about the ad
                 # itself (title/price/model) had actually changed.
-                hash_payload={k: v for k, v in payload.items() if k not in ("first_seen", "raw_json")},
+                hash_payload={
+                    k: v for k, v in payload.items() if k not in ("first_seen", "raw_json")
+                },
             )
             if not is_new_or_changed:
                 continue

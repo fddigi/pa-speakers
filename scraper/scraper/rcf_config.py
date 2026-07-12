@@ -24,6 +24,7 @@ def load_config(path: str | Path | None = None) -> dict:
     # config.ci-smoke.yaml) without touching the real config.yaml -- the live
     # scrapers hit real commercial marketplaces and must never run unattended
     # against shared CI runners on every push/PR.
-    config_path = Path(path) if path else Path(os.environ.get("RCF_CONFIG_PATH", DEFAULT_CONFIG_PATH))
+    env_path = os.environ.get("RCF_CONFIG_PATH", DEFAULT_CONFIG_PATH)
+    config_path = Path(path) if path else Path(env_path)
     with open(config_path, encoding="utf-8") as f:
         return yaml.safe_load(f)

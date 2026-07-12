@@ -100,7 +100,9 @@ def to_dkk(amount: float, currency: str, rates: dict) -> float:
     raise ValueError(f"Ukendt valuta: {currency}")
 
 
-def compute_landed_price_dkk(price_dkk: float, origin_country_code: str | None, import_costs: dict) -> tuple[float, float]:
+def compute_landed_price_dkk(
+    price_dkk: float, origin_country_code: str | None, import_costs: dict
+) -> tuple[float, float]:
     """Beregner landed cost (reel slutpris inkl. fragt+told+moms) for saelgere udenfor EU.
 
     Returnerer (landed_price_dkk, shipping_customs_dkk). For EU-saelgere (eller ukendt
@@ -116,16 +118,19 @@ def compute_landed_price_dkk(price_dkk: float, origin_country_code: str | None, 
     customs_value_dkk = price_dkk + shipping_dkk
     duty_threshold_dkk = import_costs["duty_threshold_eur"] * eur_dkk
 
-    duty_dkk = customs_value_dkk * (import_costs["duty_pct"] / 100) if customs_value_dkk > duty_threshold_dkk else 0.0
+    over_threshold = customs_value_dkk > duty_threshold_dkk
+    duty_dkk = customs_value_dkk * (import_costs["duty_pct"] / 100) if over_threshold else 0.0
     vat_dkk = (customs_value_dkk + duty_dkk) * (import_costs["vat_pct"] / 100)
 
     shipping_customs_dkk = shipping_dkk + duty_dkk + vat_dkk
     return price_dkk + shipping_customs_dkk, shipping_customs_dkk
 
 
-def normalize_listing(*, source: str, title: str, description: str, price_amount: float,
-                       price_currency: str, url: str, rates: dict, extra: dict | None = None,
-                       origin_country_code: str | None = None, import_costs: dict | None = None) -> dict:
+def normalize_listing(
+    *, source: str, title: str, description: str, price_amount: float,
+    price_currency: str, url: str, rates: dict, extra: dict | None = None,
+    origin_country_code: str | None = None, import_costs: dict | None = None,
+) -> dict:
     """Bygger et normaliseret listing-dict klar til dedup/klassifikation.
 
     Antal (par vs. enkelt) udledes KUN fra titlen, ikke beskrivelsen -- beskrivelser
@@ -147,7 +152,9 @@ def normalize_listing(*, source: str, title: str, description: str, price_amount
 
     if import_costs is not None:
         import_costs = {**import_costs, "_eur_dkk_rate": rates["eur_dkk"]}
-        landed_price_dkk, shipping_customs_dkk = compute_landed_price_dkk(price_dkk, origin_country_code, import_costs)
+        landed_price_dkk, shipping_customs_dkk = compute_landed_price_dkk(
+            price_dkk, origin_country_code, import_costs
+        )
     else:
         landed_price_dkk, shipping_customs_dkk = price_dkk, 0.0
 

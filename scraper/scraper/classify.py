@@ -90,8 +90,10 @@ def _percentile(sorted_values: list, pct: float) -> float:
     return sorted_values[f] + (sorted_values[c] - sorted_values[f]) * (k - f)
 
 
-def classify_dynamic(listing: dict, conn, thresholds: dict, mk1_beater: dict,
-                      min_samples: int = 5, lookback_days: int = 180, exclude_id: str | None = None) -> tuple[str, str]:
+def classify_dynamic(
+    listing: dict, conn, thresholds: dict, mk1_beater: dict,
+    min_samples: int = 5, lookback_days: int = 180, exclude_id: str | None = None,
+) -> tuple[str, str]:
     """Klassificerer ud fra percentiler af historiske priser (samme model+generation)
     i seen.db, naar der er nok datapunkter -- ellers statisk taerskeltabel som fallback.
 
@@ -117,7 +119,8 @@ def classify_dynamic(listing: dict, conn, thresholds: dict, mk1_beater: dict,
     if exclude_id is not None:
         rows = conn.execute(
             "SELECT price_per_unit_dkk FROM listings "
-            "WHERE model = ? AND gen = ? AND price_per_unit_dkk IS NOT NULL AND first_seen >= ? AND item_key != ?",
+            "WHERE model = ? AND gen = ? AND price_per_unit_dkk IS NOT NULL "
+            "AND first_seen >= ? AND item_key != ?",
             (model, gen, cutoff, exclude_id),
         ).fetchall()
     else:

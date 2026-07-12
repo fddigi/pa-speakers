@@ -17,7 +17,9 @@ logger = logging.getLogger("pa_monitor.blocket")
 BASE_URL = "https://www.blocket.se"
 SEARCH_URL_TMPL = BASE_URL + "/annonser/hela_sverige?q={query}"
 
-BOT_WALL_MARKERS = ["captcha", "unusual traffic", "access denied", "are you a robot", "har vi upptaeckt"]
+BOT_WALL_MARKERS = [
+    "captcha", "unusual traffic", "access denied", "are you a robot", "har vi upptaeckt",
+]
 
 
 def _build_search_url(term: str) -> str:
@@ -95,7 +97,9 @@ def fetch(config: dict, dry_run: bool = False) -> list[dict]:
             pages_fetched = 0
             for term in search_terms:
                 if pages_fetched >= max_pages:
-                    logger.info("Blocket: naaet max_pages_total (%d), stopper for denne koersel", max_pages)
+                    logger.info(
+                        "Blocket: naaet max_pages_total (%d), stopper for denne koersel", max_pages
+                    )
                     break
                 try:
                     url = _build_search_url(term)
@@ -105,7 +109,8 @@ def fetch(config: dict, dry_run: bool = False) -> list[dict]:
 
                     if _looks_like_bot_wall(page):
                         logger.warning(
-                            "Blocket: bot-wall/CAPTCHA moedt for '%s', springer kilden over for denne koersel",
+                            "Blocket: bot-wall/CAPTCHA moedt for '%s', springer kilden over "
+                            "for denne koersel",
                             term,
                         )
                         break

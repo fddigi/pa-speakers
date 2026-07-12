@@ -59,7 +59,9 @@ def fetch(config: dict, dry_run: bool = False) -> list[dict]:
     eu_country_codes = set(config.get("import_costs", {}).get("eu_country_codes", []))
     reverb_cfg = config.get("reverb", {})
     condition = reverb_cfg.get("condition")
-    exclude_origin_countries = set(c.upper() for c in reverb_cfg.get("exclude_origin_countries", []))
+    exclude_origin_countries = {
+        c.upper() for c in reverb_cfg.get("exclude_origin_countries", [])
+    }
     raw_listings = []
     excluded_count = 0
 
@@ -68,7 +70,10 @@ def fetch(config: dict, dry_run: bool = False) -> list[dict]:
             try:
                 page = 1
                 while page <= MAX_PAGES_PER_TERM:
-                    logger.info("Reverb: soeger '%s' side %d (condition=%s)", term, page, condition or "alle")
+                    logger.info(
+                        "Reverb: soeger '%s' side %d (condition=%s)",
+                        term, page, condition or "alle",
+                    )
                     data = _fetch_page(session, term, page, condition)
                     listings = data.get("listings", [])
                     if not listings:
@@ -101,7 +106,11 @@ def fetch(config: dict, dry_run: bool = False) -> list[dict]:
                             "price_currency": currency,
                             "url": url,
                             "origin_country_code": origin_country_code,
-                            "extra": {"search_term": term, "reverb_id": item.get("id"), "condition": item.get("condition", {}).get("slug")},
+                            "extra": {
+                                "search_term": term,
+                                "reverb_id": item.get("id"),
+                                "condition": item.get("condition", {}).get("slug"),
+                            },
                         })
 
                     total_pages = data.get("total_pages", page)
@@ -111,12 +120,17 @@ def fetch(config: dict, dry_run: bool = False) -> list[dict]:
                     time.sleep(REQUEST_DELAY_S)
 
             except requests.RequestException:
-                logger.exception("Reverb: fejl ved soegning efter '%s', springer denne soegning over", term)
+                logger.exception(
+                    "Reverb: fejl ved soegning efter '%s', springer denne soegning over", term
+                )
                 continue
 
             time.sleep(REQUEST_DELAY_S)
 
     if excluded_count:
-        logger.info("Reverb: %d annonce(r) droppet (oprindelse i %s)", excluded_count, exclude_origin_countries)
+        logger.info(
+            "Reverb: %d annonce(r) droppet (oprindelse i %s)",
+            excluded_count, exclude_origin_countries,
+        )
 
     return raw_listings

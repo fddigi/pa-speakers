@@ -40,7 +40,9 @@ def _get_previous_in_stock(conn: sqlite3.Connection, url: str):
     return bool(row[0]) if row else None
 
 
-def _save_state(conn: sqlite3.Connection, url: str, in_stock: bool, price_dkk, dry_run: bool = False) -> None:
+def _save_state(
+    conn: sqlite3.Connection, url: str, in_stock: bool, price_dkk, dry_run: bool = False
+) -> None:
     if dry_run:
         return
     conn.execute(
@@ -134,14 +136,18 @@ def fetch(config: dict, dry_run: bool = False) -> list[dict]:
         with requests.Session() as session:
             try:
                 logger.info("Thomann: henter kategoriside %s", category_url)
-                resp = session.get(category_url, timeout=TIMEOUT_S, headers={"User-Agent": "Mozilla/5.0"})
+                resp = session.get(
+                    category_url, timeout=TIMEOUT_S, headers={"User-Agent": "Mozilla/5.0"}
+                )
                 resp.raise_for_status()
             except requests.RequestException:
                 logger.exception("Thomann: kunne ikke hente kategoriside, springer kilden over")
                 return []
 
             all_bstock_cards = _find_bstock_cards(resp.text)
-            matching_cards = [c for c in all_bstock_cards if _matches_target_models(c["title"], search_terms)]
+            matching_cards = [
+                c for c in all_bstock_cards if _matches_target_models(c["title"], search_terms)
+            ]
             logger.info(
                 "Thomann: %d B-Stock-produkter i kategorien, %d matcher vores modeller",
                 len(all_bstock_cards), len(matching_cards),
@@ -161,7 +167,9 @@ def fetch(config: dict, dry_run: bool = False) -> list[dict]:
                     # 0-kr-annonce -- det ville se ud som et falsk GODT KØB. Spring over
                     # uden at gemme tilstand, saa vi proever igen (og rapporterer korrekt)
                     # naeste koersel.
-                    logger.warning("Thomann: kunne ikke hente pris for %s, proever igen naeste koersel", url)
+                    logger.warning(
+                        "Thomann: kunne ikke hente pris for %s, proever igen naeste koersel", url
+                    )
                     continue
 
                 if previous is not True:

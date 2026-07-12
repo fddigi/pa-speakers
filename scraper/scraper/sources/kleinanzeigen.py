@@ -1,4 +1,5 @@
-"""Kleinanzeigen.de: intet API, aggressiv bot-beskyttelse -> Playwright headful, throttlet, best-effort.
+"""Kleinanzeigen.de: intet API, aggressiv bot-beskyttelse -> Playwright headful,
+throttlet, best-effort.
 
 Fejler ALDRIG hele scriptet: bot-wall eller andre problemer logges og giver blot en tom
 liste for denne koersel. Se pa-monitor-claude-code-prompt_1.md, punkt 3.
@@ -94,12 +95,18 @@ def fetch(config: dict, dry_run: bool = False) -> list[dict]:
                 if bot_wall_hit:
                     break
                 if pages_fetched_total >= max_pages_total:
-                    logger.info("Kleinanzeigen: naaet max_pages_total (%d), stopper for denne koersel", max_pages_total)
+                    logger.info(
+                        "Kleinanzeigen: naaet max_pages_total (%d), stopper for denne koersel",
+                        max_pages_total,
+                    )
                     break
 
                 for page_num in range(1, max_pages_per_term + 1):
                     if pages_fetched_total >= max_pages_total:
-                        logger.info("Kleinanzeigen: naaet max_pages_total (%d), stopper for denne koersel", max_pages_total)
+                        logger.info(
+                            "Kleinanzeigen: naaet max_pages_total (%d), stopper for denne koersel",
+                            max_pages_total,
+                        )
                         break
 
                     # FRISK context+side PR. FORESPOERGSEL: Kleinanzeigen degraderer
@@ -133,7 +140,8 @@ def fetch(config: dict, dry_run: bool = False) -> list[dict]:
 
                         if _looks_like_bot_wall(page):
                             logger.warning(
-                                "Kleinanzeigen: bot-wall/CAPTCHA moedt for '%s' side %d, springer kilden over for denne koersel",
+                                "Kleinanzeigen: bot-wall/CAPTCHA moedt for '%s' side %d, "
+                                "springer kilden over for denne koersel",
                                 term, page_num,
                             )
                             bot_wall_hit = True
@@ -141,7 +149,10 @@ def fetch(config: dict, dry_run: bool = False) -> list[dict]:
 
                         cards = _parse_listing_cards(page)
                         if not cards:
-                            logger.info("Kleinanzeigen: '%s' side %d gav 0 kort, sidste side naaet", term, page_num)
+                            logger.info(
+                                "Kleinanzeigen: '%s' side %d gav 0 kort, sidste side naaet",
+                                term, page_num,
+                            )
                             break
 
                         for card in cards:
@@ -160,14 +171,19 @@ def fetch(config: dict, dry_run: bool = False) -> list[dict]:
 
                         time.sleep(random.uniform(min_delay, max_delay))
                     except Exception:
-                        logger.exception("Kleinanzeigen: fejl under haandtering af '%s' side %d, springer over", term, page_num)
+                        logger.exception(
+                            "Kleinanzeigen: fejl under haandtering af '%s' side %d, springer over",
+                            term, page_num,
+                        )
                         break
                     finally:
                         context.close()
 
             browser.close()
     except Exception:
-        logger.exception("Kleinanzeigen: kilden fejlede helt, springer kilden over for denne koersel")
+        logger.exception(
+            "Kleinanzeigen: kilden fejlede helt, springer kilden over for denne koersel"
+        )
         return []
 
     return raw_listings

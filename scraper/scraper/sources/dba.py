@@ -23,7 +23,9 @@ logger = logging.getLogger("pa_monitor.dba")
 BASE_URL = "https://www.dba.dk"
 SEARCH_URL_TMPL = BASE_URL + "/recommerce/forsale/search?q={query}"
 
-BOT_WALL_MARKERS = ["captcha", "for mange foresp", "unusual traffic", "access denied", "er du en robot"]
+BOT_WALL_MARKERS = [
+    "captcha", "for mange foresp", "unusual traffic", "access denied", "er du en robot",
+]
 
 
 def _build_search_url(term: str) -> str:
@@ -101,7 +103,9 @@ def fetch(config: dict, dry_run: bool = False) -> list[dict]:
             pages_fetched = 0
             for term in search_terms:
                 if pages_fetched >= max_pages:
-                    logger.info("DBA: naaet max_pages_total (%d), stopper for denne koersel", max_pages)
+                    logger.info(
+                        "DBA: naaet max_pages_total (%d), stopper for denne koersel", max_pages
+                    )
                     break
                 try:
                     url = _build_search_url(term)
@@ -116,7 +120,8 @@ def fetch(config: dict, dry_run: bool = False) -> list[dict]:
 
                     if _looks_like_bot_wall(page):
                         logger.warning(
-                            "DBA: bot-wall/CAPTCHA moedt for '%s', springer kilden over for denne koersel",
+                            "DBA: bot-wall/CAPTCHA moedt for '%s', springer kilden over "
+                            "for denne koersel",
                             term,
                         )
                         break

@@ -117,7 +117,7 @@
     .run-banner.info { background: var(--good-bg); color: var(--good); }
     .run-banner.warn { background: var(--fair-bg); color: var(--fair); }
 
-    button, input[type=text] {
+    button, input[type=text], select {
       font: inherit;
       font-size: 0.85rem;
       border-radius: 6px;
@@ -125,6 +125,13 @@
       background: var(--surface);
       color: var(--text);
       padding: 7px 11px;
+    }
+    /* F8: sort control only makes sense on mobile - on desktop the <thead>
+       column-header buttons already do this (and are visible there), so
+       showing both would be two competing sort UIs on the same viewport. */
+    #mobile-sort { display: none; }
+    @media (max-width: 640px) {
+      #mobile-sort { display: block; width: 100%; }
     }
     button {
       cursor: pointer;
@@ -436,6 +443,13 @@
     <div class="card">
       <div class="controls">
         <input type="text" id="filter-search" placeholder="Filtrér liste efter titel/model..." />
+        <select id="mobile-sort">
+          <option value="">Sortér: Standard</option>
+          <option value="price_per_unit_dkk:asc">Pris/enhed (lav → høj)</option>
+          <option value="price_per_unit_dkk:desc">Pris/enhed (høj → lav)</option>
+          <option value="first_seen:desc">Først set (nyeste)</option>
+          <option value="model:asc">Model</option>
+        </select>
         <button id="reload">Genindlæs</button>
       </div>
 
@@ -572,6 +586,10 @@
           indicator.textContent = "";
         }
       });
+      // Keep the mobile <select> in sync with a desktop <thead> click, so it
+      // reflects the active sort if the window is later narrowed to mobile.
+      const mobileSort = document.getElementById("mobile-sort");
+      mobileSort.value = sortKey ? `${sortKey}:${sortAsc ? "asc" : "desc"}` : "";
     }
 
     function isRecent(firstSeen) {
@@ -725,6 +743,22 @@
 
     document.getElementById("filter-search").addEventListener("input", renderTable);
     document.getElementById("reload").addEventListener("click", loadListings);
+
+    // F8: mobile sort control - genbruger applySort()/renderTable() 1:1,
+    // ingen ny sorteringslogik. "" nulstiller til standard-sorteringen.
+    document.getElementById("mobile-sort").addEventListener("change", (event) => {
+      const value = event.target.value;
+      if (!value) {
+        sortKey = null;
+        sortAsc = true;
+      } else {
+        const [key, dir] = value.split(":");
+        sortKey = key;
+        sortAsc = dir === "asc";
+      }
+      applySort();
+      renderTable();
+    });
 
     document.getElementById("logout").addEventListener("click", async () => {
       await fetch(`${API_BASE}/logout`, { method: "POST", headers: authHeaders() });

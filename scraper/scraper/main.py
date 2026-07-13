@@ -28,6 +28,7 @@ from .pairs import compute_mixed_pairs, sync_mixed_pairs_to_turso
 from .pipeline import TURSO_SCHEMA, run_source
 from .price_history import sync_price_history_to_turso
 from .rcf_config import load_config
+from .schema_utils import add_column_if_missing
 from .search_terms import load_search_terms
 from .source_cadence import SOURCE_STATE_SCHEMA, mark_source_run, should_run_source
 from .sources import blocket, dba, ebay, gearloop, kleinanzeigen, reverb, thomann
@@ -100,15 +101,27 @@ def _run_locked(settings: Settings, force_source: str | None = None) -> int:
             if settings.turso_configured:
                 with TursoClient(settings) as turso:
                     turso.execute(TURSO_SCHEMA)  # idempotent schema migration, not a data rewrite
+                    # F9: additive migration for the ALREADY-EXISTING listings
+                    # table (predates the category column) - see schema_utils.py.
+                    add_column_if_missing(
+                        turso, "listings", "category", "TEXT NOT NULL DEFAULT 'PA-højttalere'"
+                    )
 
                     # Dynamic search terms ("ønskeseddel"): Turso is the source of
                     # truth when configured, editable from the webapp - see
                     # search_terms.py. Overwrites config.yaml's static list in-memory
                     # only, so every source module's existing
                     # `config["search_terms"]["primary"] + secondary` read keeps
-                    # working unchanged.
-                    dynamic_terms = load_search_terms(rcf_config, turso)
-                    rcf_config["search_terms"] = {"primary": dynamic_terms, "secondary": []}
+                    # working unchanged. F9: also builds a term->category lookup
+                    # (rcf_config["term_category_map"]) so pipeline.py can tag each
+                    # found listing with the category of the term that found it,
+                    # without changing every source module's fetch() signature.
+                    dynamic_term_pairs = load_search_terms(rcf_config, turso)
+                    rcf_config["search_terms"] = {
+                        "primary": [term for term, _category in dynamic_term_pairs],
+                        "secondary": [],
+                    }
+                    rcf_config["term_category_map"] = dict(dynamic_term_pairs)
 
                     all_price_drop_events = []
                     for name in enabled_sources:

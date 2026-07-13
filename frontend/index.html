@@ -236,7 +236,9 @@
       font-size: 0.9rem;
     }
     .term-chips li button:hover { background: var(--bad-bg); color: var(--bad); }
-    #search-terms-form { display: flex; gap: 8px; }
+    .term-category-group { margin: 0 0 12px; }
+    .term-category-group h3 { font-size: 0.85rem; color: var(--text-muted); margin: 0 0 6px; }
+    #search-terms-form { display: flex; gap: 8px; flex-wrap: wrap; }
     #search-terms-form input { flex: 1; max-width: 320px; }
 
     /* Filters */
@@ -452,9 +454,16 @@
           Dette er IKKE et filter for listen nedenfor - det styrer hvad scraperen
           søger efter på markedspladserne ved næste kørsel.
         </p>
-        <ul class="term-chips" id="search-terms-list"></ul>
+        <div id="search-terms-groups"></div>
         <form id="search-terms-form">
           <input type="text" id="search-terms-input" placeholder="fx RCF ART 315" required />
+          <input
+            type="text"
+            id="search-terms-category-input"
+            list="search-terms-category-options"
+            placeholder="Kategori (valgfri, standard: PA-højttalere)"
+          />
+          <datalist id="search-terms-category-options"></datalist>
           <button type="submit" class="primary">Tilføj</button>
         </form>
         <p class="error-text" id="search-terms-error"></p>
@@ -464,6 +473,9 @@
     <div class="card">
       <div class="controls">
         <input type="text" id="filter-search" placeholder="Filtrér liste efter titel/model..." />
+        <select id="category-filter" style="display: none">
+          <option value="">Alle kategorier</option>
+        </select>
         <select id="mobile-sort">
           <option value="">Sortér: Standard</option>
           <option value="price_per_unit_dkk:asc">Pris/enhed (lav → høj)</option>
@@ -534,6 +546,7 @@
     const CLASS_RANK = { "GODT KØB": 0, "FAIR": 1, "OVERPRISET": 2, "UKENDT": 3 };
     let allListings = [];
     let activeClassFilter = null; // classification chip filter (client-side, no refetch)
+    let activeCategoryFilter = null; // F9: category dropdown filter (client-side, no refetch)
     let sortKey = null, sortAsc = true; // null = default combined sort (classification, then newest)
 
     function authHeaders() {
@@ -577,8 +590,33 @@
       allListings = listings;
       applySort();
       renderStats();
+      renderCategoryFilter();
       renderLastUpdated();
       renderTable();
+    }
+
+    // F9 v1: kun vist naar der reelt er mere end én kategori i brug - med kun
+    // "PA-højttalere" (den eneste kategori de fleste brugere nogensinde vil se
+    // i v1) ville en dropdown med ét meningsløst valg bare vaere støj.
+    function renderCategoryFilter() {
+      const select = document.getElementById("category-filter");
+      const categories = [...new Set(allListings.map((row) => row.category || "PA-højttalere"))].sort();
+      if (categories.length <= 1) {
+        select.style.display = "none";
+        activeCategoryFilter = null;
+        return;
+      }
+      select.style.display = "block";
+      const previousValue = select.value;
+      select.innerHTML = '<option value="">Alle kategorier</option>';
+      for (const category of categories) {
+        const option = document.createElement("option");
+        option.value = category;
+        option.textContent = category;
+        select.appendChild(option);
+      }
+      select.value = categories.includes(previousValue) ? previousValue : "";
+      activeCategoryFilter = select.value || null;
     }
 
     function applySort() {
@@ -769,6 +807,7 @@
 
       const filtered = allListings.filter((row) => {
         if (activeClassFilter && (row.classification ?? "UKENDT") !== activeClassFilter) return false;
+        if (activeCategoryFilter && (row.category ?? "PA-højttalere") !== activeCategoryFilter) return false;
         if (!search) return true;
         const haystack = `${row.title ?? ""} ${row.model ?? ""}`.toLowerCase();
         return haystack.includes(search);
@@ -877,6 +916,13 @@
     document.getElementById("filter-search").addEventListener("input", renderTable);
     document.getElementById("reload").addEventListener("click", loadListings);
 
+    // F9: kategori-filter - kun synlig naar renderCategoryFilter() finder mere
+    // end én kategori i brug.
+    document.getElementById("category-filter").addEventListener("change", (event) => {
+      activeCategoryFilter = event.target.value || null;
+      renderTable();
+    });
+
     // F8: mobile sort control - genbruger applySort()/renderTable() 1:1,
     // ingen ny sorteringslogik. "" nulstiller til standard-sorteringen.
     document.getElementById("mobile-sort").addEventListener("change", (event) => {
@@ -902,6 +948,9 @@
     // Dynamic search terms ("ønskeseddel") - see search_terms.py/index.ts's
     // /api/search-terms. Editing here is what the scraper's next run will
     // actually search for, instead of requiring a config.yaml edit + redeploy.
+    // F9 v1: grupperet pr. kategori - ren organisering/tagging, se FEATURES.md F9.
+    let knownCategories = ["PA-højttalere"];
+
     async function loadSearchTerms() {
       const errorEl = document.getElementById("search-terms-error");
       errorEl.textContent = "";
@@ -911,19 +960,48 @@
         return;
       }
       const { searchTerms } = await res.json();
-      const list = document.getElementById("search-terms-list");
-      list.innerHTML = "";
+      const container = document.getElementById("search-terms-groups");
+      container.innerHTML = "";
+
+      const byCategory = new Map();
       for (const row of searchTerms) {
-        const li = document.createElement("li");
-        li.appendChild(document.createTextNode(row.term));
-        const removeBtn = document.createElement("button");
-        removeBtn.type = "button";
-        removeBtn.textContent = "✕";
-        removeBtn.setAttribute("aria-label", `Fjern ${row.term}`);
-        removeBtn.title = "Fjern søgeterm";
-        removeBtn.addEventListener("click", () => removeSearchTerm(row.term));
-        li.appendChild(removeBtn);
-        list.appendChild(li);
+        const category = row.category || "PA-højttalere";
+        if (!byCategory.has(category)) byCategory.set(category, []);
+        byCategory.get(category).push(row);
+      }
+
+      knownCategories = [...new Set(["PA-højttalere", ...byCategory.keys()])];
+      const categoryOptions = document.getElementById("search-terms-category-options");
+      categoryOptions.innerHTML = "";
+      for (const category of knownCategories) {
+        const option = document.createElement("option");
+        option.value = category;
+        categoryOptions.appendChild(option);
+      }
+
+      for (const [category, rows] of byCategory) {
+        const group = document.createElement("div");
+        group.className = "term-category-group";
+        const heading = document.createElement("h3");
+        heading.textContent = category;
+        group.appendChild(heading);
+
+        const list = document.createElement("ul");
+        list.className = "term-chips";
+        for (const row of rows) {
+          const li = document.createElement("li");
+          li.appendChild(document.createTextNode(row.term));
+          const removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.textContent = "✕";
+          removeBtn.setAttribute("aria-label", `Fjern ${row.term}`);
+          removeBtn.title = "Fjern søgeterm";
+          removeBtn.addEventListener("click", () => removeSearchTerm(row.term));
+          li.appendChild(removeBtn);
+          list.appendChild(li);
+        }
+        group.appendChild(list);
+        container.appendChild(group);
       }
     }
 
@@ -944,15 +1022,17 @@
     document.getElementById("search-terms-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const input = document.getElementById("search-terms-input");
+      const categoryInput = document.getElementById("search-terms-category-input");
       const errorEl = document.getElementById("search-terms-error");
       errorEl.textContent = "";
       const term = input.value.trim();
       if (!term) return;
+      const category = categoryInput.value.trim() || "PA-højttalere";
 
       const res = await fetch(`${API_BASE}/api/search-terms`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ term }),
+        body: JSON.stringify({ term, category }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -960,6 +1040,7 @@
         return;
       }
       input.value = "";
+      categoryInput.value = "";
       await loadSearchTerms();
     });
 

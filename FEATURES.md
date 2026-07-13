@@ -473,6 +473,42 @@ opleves featuren som "halvt virkende". (3) main.py's flad-gøring af søgetermer
 `primary + secondary`-read i live -- at bære kategorien igennem uden at bryde
 den kontrakt kræver omhu.
 
+**Leveret (2026-07-13), v1 = fortolkning (a):**
+
+- `search_terms.py`: `category`-kolonne på `search_terms`, `load_search_terms()`
+  returnerer nu `(term, category)`-par.
+- `main.py`: flader STADIG ud til `{"primary": [...], "secondary": []}` for at
+  holde alle kilders eksisterende kontrakt i live (risiko 3 ovenfor) -- men
+  bygger PARALLELT `rcf_config["term_category_map"]`, som `pipeline.py` slår op
+  i via `listing["raw"]["search_term"]` for at tagge hver fundne annonce.
+  Kilder uden et search_term i `extra` (Thomann) falder til
+  `DEFAULT_CATEGORY = "PA-højttalere"`.
+- `listings.category` + `search_terms.category`: TILFØJET til allerede-
+  eksisterende tabeller med RIGTIGE data (134 rækker i produktion) via en ny
+  `scraper/scraper/schema_utils.py:add_column_if_missing()` -- `CREATE TABLE
+  IF NOT EXISTS` alene rører aldrig en allerede-eksisterende tabel.
+  **Fund undervejs:** den oprindelige try-ALTER-og-fang-fejlen-bagefter-
+  tilgang virkede IKKE pålideligt mod Turso (libsql_client's HTTP-transport
+  kastede en uigennemsigtig `KeyError: 'result'` i stedet for en fejlbesked
+  der indeholdt "duplicate column"). Rettet til at TJEKKE via
+  `PRAGMA table_info` FØRST i stedet for at forsøge og fange bagefter -- samme
+  rettelse lavet i `worker/src/index.ts`'s `ensureColumn()`. Verificeret mod
+  den RIGTIGE produktions-Turso-database: alle 134 eksisterende rækker fik
+  korrekt `category='PA-højttalere'`, klassifikationen uændret.
+- `category` er bevidst UDELUKKET fra `upsert_if_changed`'s hash (samme
+  begrundelse som `raw_json`: tvetydig for annoncer der matcher flere
+  søgetermer i samme køring).
+- Worker: `/api/search-terms` GET/POST bærer nu `category`;
+  `/api/listings?category=`-filter tilføjet.
+- Frontend: ønskeseddel-chips grupperet pr. kategori, tilføj-formen har et
+  kategori-felt (datalist-forslag fra kendte kategorier); et kategori-filter
+  er tilføjet til listen, men vist SKJULT indtil der reelt findes mere end én
+  kategori i brug (i dag kun `PA-højttalere`).
+- Verificeret: en hypotetisk "Synths"-kategori-term tagger korrekt sin
+  annonce med `category="Synths"`, mens `model` fortsat korrekt bliver `None`
+  → `UKENDT` nedstrøms (v1's grænse fungerer som dokumenteret, ingen falsk
+  klassifikationsværdi for ukendte kategorier).
+
 ---
 
 ## F10: Spike: prishistorik / klikbar klassifikations-drilldown

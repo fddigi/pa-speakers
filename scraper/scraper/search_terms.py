@@ -14,7 +14,14 @@ import logging
 
 from scraper_core.turso_client import TursoClient
 
+from .schema_utils import add_column_if_missing
+
 logger = logging.getLogger(__name__)
+
+# F9 v1: ren organisering/tagging, ikke et reelt synth/studie-scope -- se
+# FEATURES.md F9's "Ærlig vurdering". Alle eksisterende og nyoprettede termer
+# der ikke selv angiver en kategori, falder tilbage til denne.
+DEFAULT_CATEGORY = "PA-højttalere"
 
 SEARCH_TERMS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS search_terms (
@@ -25,15 +32,18 @@ CREATE TABLE IF NOT EXISTS search_terms (
 """
 
 
-def _static_terms_from_config(rcf_config: dict) -> list[str]:
+def _static_terms_from_config(rcf_config: dict) -> list[tuple[str, str]]:
     st = rcf_config.get("search_terms", {})
-    return list(st.get("primary", [])) + list(st.get("secondary", []))
+    terms = list(st.get("primary", [])) + list(st.get("secondary", []))
+    return [(term, DEFAULT_CATEGORY) for term in terms]
 
 
-def load_search_terms(rcf_config: dict, turso: TursoClient | None) -> list[str]:
-    """Returns the active search term list.
+def load_search_terms(rcf_config: dict, turso: TursoClient | None) -> list[tuple[str, str]]:
+    """Returns the active (term, category) pairs.
 
-    Without Turso: always the static config.yaml list (local-only mode).
+    Without Turso: always the static config.yaml list (local-only mode),
+    every term tagged with DEFAULT_CATEGORY (config.yaml doesn't carry
+    categories in v1 - see FEATURES.md F9).
 
     With Turso: the `search_terms` table is the source of truth. On first use
     (empty table), it's seeded from config.yaml's existing list so a project's
@@ -44,9 +54,14 @@ def load_search_terms(rcf_config: dict, turso: TursoClient | None) -> list[str]:
         return _static_terms_from_config(rcf_config)
 
     turso.execute(SEARCH_TERMS_SCHEMA)
-    result = turso.execute("SELECT term FROM search_terms WHERE enabled = 1")
+    # F9: additive migration for an ALREADY-EXISTING search_terms table (this
+    # table predates the category column) - see schema_utils.py.
+    add_column_if_missing(
+        turso, "search_terms", "category", f"TEXT NOT NULL DEFAULT '{DEFAULT_CATEGORY}'"
+    )
+    result = turso.execute("SELECT term, category FROM search_terms WHERE enabled = 1")
     if result.rows:
-        return [row[0] for row in result.rows]
+        return [(row[0], row[1]) for row in result.rows]
 
     static_terms = _static_terms_from_config(rcf_config)
     if static_terms:
@@ -54,11 +69,11 @@ def load_search_terms(rcf_config: dict, turso: TursoClient | None) -> list[str]:
         turso.batch(
             [
                 (
-                    "INSERT INTO search_terms (term, enabled, created_at) VALUES (?, 1, ?) "
-                    "ON CONFLICT(term) DO NOTHING",
-                    (term, now),
+                    "INSERT INTO search_terms (term, category, enabled, created_at) "
+                    "VALUES (?, ?, 1, ?) ON CONFLICT(term) DO NOTHING",
+                    (term, category, now),
                 )
-                for term in static_terms
+                for term, category in static_terms
             ]
         )
         logger.info(

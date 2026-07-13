@@ -23,6 +23,10 @@ CREATE TABLE IF NOT EXISTS users (
 -- and worker/src/index.ts's /api/listings endpoint. Migrated from PA SPEAKERS'
 -- original db.py schema (source+url dedup, landed-cost pricing, dynamic
 -- classification) - see that project's README.md for the full field semantics.
+-- F9: `category` was added AFTER this table already had real rows in
+-- production - see scraper/scraper/schema_utils.py / worker/src/index.ts's
+-- ensureColumn() for the additive ALTER TABLE migration that actually applies
+-- it (this CREATE TABLE IF NOT EXISTS alone only matters for a brand new DB).
 CREATE TABLE IF NOT EXISTS listings (
     item_key TEXT PRIMARY KEY,
     source TEXT NOT NULL,
@@ -39,18 +43,21 @@ CREATE TABLE IF NOT EXISTS listings (
     classification_method TEXT,
     url TEXT,
     first_seen TEXT NOT NULL,
-    raw_json TEXT
+    raw_json TEXT,
+    category TEXT NOT NULL DEFAULT 'PA-højttalere'
 );
 
 -- Dynamic search terms ("ønskeseddel"), inspired by PLAGG's own webapp-editable
 -- wishlist: the scraper's source of truth for what to search for once Turso is
 -- configured, editable via the frontend instead of requiring a config.yaml edit
 -- + redeploy. See scraper/scraper/search_terms.py and worker/src/index.ts's
--- /api/search-terms endpoints.
+-- /api/search-terms endpoints. F9: `category` - see note on `listings` above,
+-- same additive-migration caveat applies here.
 CREATE TABLE IF NOT EXISTS search_terms (
     term TEXT PRIMARY KEY,
     enabled INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'PA-højttalere'
 );
 
 -- "Kør nu"-kontrol (single-row), inspireret af PLAGG's webapp-trigger: sat af

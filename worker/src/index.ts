@@ -96,15 +96,40 @@ app.get("/api/me", requireAuth, (c) => {
   return c.json({ username: session.sub, role: session.role });
 });
 
+// F9: additive migration for tables that already existed before the category
+// column - CREATE TABLE IF NOT EXISTS alone never adds a column retroactively.
+// Same idempotent pattern as scraper/scraper/schema_utils.py: check via
+// PRAGMA table_info FIRST rather than attempting the ALTER and catching a
+// "duplicate column" error afterwards - see that Python module's docstring
+// for why the catch-after approach turned out to be unreliable against Turso.
+const DEFAULT_CATEGORY = "PA-højttalere";
+
+async function ensureColumn(
+  db: ReturnType<typeof getDbClient>,
+  table: string,
+  column: string,
+  ddl: string,
+): Promise<void> {
+  const result = await db.execute(`PRAGMA table_info(${table})`);
+  const existingColumns = new Set(result.rows.map((row) => row.name as string));
+  if (existingColumns.has(column)) {
+    return;
+  }
+  await db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+}
+
 // --- Dynamic search terms ("ønskeseddel"), inspired by PLAGG's own webapp-
 // editable wishlist: this table is the scraper's source of truth for what to
 // search for once Turso is configured (see scraper/scraper/search_terms.py) -
-// editable here instead of requiring a config.yaml edit + redeploy. ---
+// editable here instead of requiring a config.yaml edit + redeploy. F9: each
+// term now carries a `category` (ren organisering/tagging - se FEATURES.md
+// F9's "Ærlig vurdering" for hvorfor det IKKE udvider klassifikationsscopet). ---
 
 app.get("/api/search-terms", requireAuth, async (c) => {
   const db = getDbClient(c.env);
+  await ensureColumn(db, "search_terms", "category", `TEXT NOT NULL DEFAULT '${DEFAULT_CATEGORY}'`);
   const result = await db.execute(
-    "SELECT term, enabled, created_at FROM search_terms ORDER BY created_at DESC",
+    "SELECT term, category, enabled, created_at FROM search_terms ORDER BY created_at DESC",
   );
   return c.json({ searchTerms: result.rows });
 });
@@ -115,13 +140,16 @@ app.post("/api/search-terms", requireAuth, async (c) => {
   if (!term) {
     return c.json({ error: "term is required" }, 400);
   }
+  const category =
+    typeof body.category === "string" && body.category.trim() ? body.category.trim() : DEFAULT_CATEGORY;
   const db = getDbClient(c.env);
+  await ensureColumn(db, "search_terms", "category", `TEXT NOT NULL DEFAULT '${DEFAULT_CATEGORY}'`);
   await db.execute({
-    sql: `INSERT INTO search_terms (term, enabled, created_at) VALUES (?, 1, ?)
-          ON CONFLICT(term) DO UPDATE SET enabled = 1`,
-    args: [term, new Date().toISOString()],
+    sql: `INSERT INTO search_terms (term, category, enabled, created_at) VALUES (?, ?, 1, ?)
+          ON CONFLICT(term) DO UPDATE SET enabled = 1, category = excluded.category`,
+    args: [term, category, new Date().toISOString()],
   });
-  return c.json({ ok: true, term });
+  return c.json({ ok: true, term, category });
 });
 
 app.delete("/api/search-terms/:term", requireAuth, async (c) => {
@@ -233,6 +261,7 @@ app.get("/api/listings", requireAuth, async (c) => {
   const classification = c.req.query("classification");
   const model = c.req.query("model");
   const source = c.req.query("source");
+  const category = c.req.query("category"); // F9
 
   const conditions: string[] = [];
   const args: (string | number)[] = [];
@@ -248,6 +277,10 @@ app.get("/api/listings", requireAuth, async (c) => {
     conditions.push("source = ?");
     args.push(source);
   }
+  if (category) {
+    conditions.push("category = ?");
+    args.push(category);
+  }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   args.push(limit);
 
@@ -262,6 +295,8 @@ app.get("/api/listings", requireAuth, async (c) => {
       old_classification TEXT, new_classification TEXT, observed_at TEXT NOT NULL
     )`,
   );
+  // F9: additive migration for the already-existing listings table.
+  await ensureColumn(db, "listings", "category", `TEXT NOT NULL DEFAULT '${DEFAULT_CATEGORY}'`);
 
   // F5: seneste prisfald pr. annonce indlejres direkte her (korreleret
   // subquery) i stedet for et separat per-række endpoint - undgår N+1 kald

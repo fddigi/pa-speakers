@@ -10,26 +10,8 @@
 
 ## Prioriteret rækkefølge (næste øverst)
 
-```
-1. F9   Kategorisering af søgninger  WSJF 1.4  TODO
-```
-
-F6, F8, F7, F11, F10, F5 og F4 er leveret — se "Leveret" nedenfor. F4 er
-dog INAKTIV indtil brugeren selv sætter EBAY_APP_ID/EBAY_CERT_ID (se
-README.md).
-
-## Scoring-detaljer
-
-```
-F9  Kategorisering af søgninger
-    BV 5  TC 2  RR 3  CoD 10  Size 7  WSJF 1.4
-    Cross-cutting (scraper + worker + frontend + TO skemamigreringer).
-    v1 er KUN organisering + tagging; percentil-klassifikationen er
-    allerede model+gen-partitioneret og røres ikke. Reelt synth-/
-    studie-scope (nye model-regex'er, nye tærskler, kilde-routing,
-    Thomann-kategori-URL'er) er en SEPARAT epic på størrelse med F4+
-    -- derfor højt Size og lav BV for selve v1-skiven. TC lav.
-```
+Alle 8 backlog-items er nu leveret — se "Leveret" nedenfor. F4 er dog
+INAKTIV indtil brugeren selv sætter EBAY_APP_ID/EBAY_CERT_ID (se README.md).
 
 ## Begrundelser (kort)
 
@@ -82,6 +64,10 @@ F9  Kategorisering af søgninger
 2026-07-13  F4: eBay.de som kilde -- sources/ebay.py bygget og
             testet (graceful skip uden nøgle, auktioner tvinges
             UKENDT), kræver brugerens egen EBAY_APP_ID/CERT_ID
+2026-07-13  F9: Kategorisering af søgninger (v1 = ren organisering/
+            tagging) -- category-kolonne tilføjet til listings +
+            search_terms via additiv migrering, term_category_map,
+            kategori-gruppering i ønskeseddel-UI, ?category=-filter
 ```
 
 Se git-historik/tidligere samtale for fulde detaljer pr. leverance.

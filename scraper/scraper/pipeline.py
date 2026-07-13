@@ -15,6 +15,7 @@ from scraper_core.local_db import LocalStore
 from scraper_core.watchdog import SourceTimeoutError, run_with_timeout
 
 from . import classify, normalize
+from .schema_utils import add_column_if_missing
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +45,19 @@ CREATE TABLE IF NOT EXISTS listings (
 """
 TURSO_SCHEMA = LOCAL_SCHEMA
 
+# F9: additive column for an already-existing `listings` table (predates
+# category) - CREATE TABLE IF NOT EXISTS above never runs again once the table
+# exists, so this can't just be added to LOCAL_SCHEMA/TURSO_SCHEMA. See
+# schema_utils.py + this module's call to add_column_if_missing below/in main.py.
+CATEGORY_COLUMN_DDL = "TEXT NOT NULL DEFAULT 'PA-højttalere'"
+
 _INSERT_SQL = """
 INSERT INTO listings (item_key, source, title, model, gen, quantity, price_dkk,
     landed_price_dkk, shipping_customs_dkk, origin_country, price_per_unit_dkk,
-    classification, classification_method, url, first_seen, raw_json)
+    classification, classification_method, url, first_seen, raw_json, category)
 VALUES (:item_key, :source, :title, :model, :gen, :quantity, :price_dkk,
     :landed_price_dkk, :shipping_customs_dkk, :origin_country, :price_per_unit_dkk,
-    :classification, :classification_method, :url, :first_seen, :raw_json)
+    :classification, :classification_method, :url, :first_seen, :raw_json, :category)
 ON CONFLICT(item_key) DO UPDATE SET
     title = excluded.title, model = excluded.model, gen = excluded.gen,
     quantity = excluded.quantity, price_dkk = excluded.price_dkk,
@@ -60,7 +67,7 @@ ON CONFLICT(item_key) DO UPDATE SET
     price_per_unit_dkk = excluded.price_per_unit_dkk,
     classification = excluded.classification,
     classification_method = excluded.classification_method,
-    url = excluded.url, raw_json = excluded.raw_json
+    url = excluded.url, raw_json = excluded.raw_json, category = excluded.category
 """
 
 
@@ -106,6 +113,7 @@ def run_source(
     run after it in the same sequential loop.
     """
     store.executescript(LOCAL_SCHEMA)
+    add_column_if_missing(store.connection, "listings", "category", CATEGORY_COLUMN_DDL)
     raw_count = 0
     changed = 0
     price_drop_events: list[dict] = []
@@ -168,6 +176,17 @@ def run_source(
                     exclude_id=item_key,
                 )
 
+            # F9 v1: kategorien for den SØGETERM der fandt denne annonce (ren
+            # organisering/tagging - se search_terms.py's DEFAULT_CATEGORY).
+            # Kilder uden et search_term i extra (fx Thomann, som poller en
+            # kategoriside i stedet for at søge pr. term) falder tilbage til
+            # standardkategorien - retfærdiggjort i FEATURES.md F9: Thomann
+            # finder reelt kun PA-udstyr uanset søgeterm.
+            search_term = listing.get("raw", {}).get("search_term")
+            category = config.get("term_category_map", {}).get(
+                search_term, "PA-højttalere"
+            )
+
             payload = {
                 "item_key": item_key,
                 "source": source_name,
@@ -185,6 +204,7 @@ def run_source(
                 "url": listing.get("url"),
                 "first_seen": first_seen,
                 "raw_json": json.dumps(listing.get("raw", {}), default=str),
+                "category": category,
             }
 
             is_new_or_changed = store.upsert_if_changed(
@@ -199,9 +219,13 @@ def run_source(
                 # of our search terms -- found 2026-07-12 via a Blocket ad that
                 # matched 3 terms and was queued 3x for what should have been one
                 # insert + zero real content changes, since nothing about the ad
-                # itself (title/price/model) had actually changed.
+                # itself (title/price/model) had actually changed. category (F9)
+                # is excluded for the SAME reason as raw_json: it's derived from
+                # whichever search_term matched THIS pass, which is exactly as
+                # ambiguous/order-dependent for a multi-term-matching ad.
                 hash_payload={
-                    k: v for k, v in payload.items() if k not in ("first_seen", "raw_json")
+                    k: v for k, v in payload.items()
+                    if k not in ("first_seen", "raw_json", "category")
                 },
             )
             if not is_new_or_changed:

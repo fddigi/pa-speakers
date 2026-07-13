@@ -617,3 +617,46 @@ billigt i spiken). Thomann nypris kan friste til at blande ny- og brugtpriser
 i klassifikationen — hold dem adskilt. Facebook: reel konto-/juridisk risiko
 ved at forsøge — spiken skal netop STOPPE et forhastet byg her, ikke muliggøre
 det.
+
+**Spike-konklusion (afklaret 2026-07-13, kode bygget hvor der var grønt lys):**
+
+- **Gearloop → BYG-JA, bygget:** Viste sig at være en Next.js App Router-SPA
+  (ikke server-renderet HTML som antaget) — søgeresultater er IKKE i den
+  statiske HTML, kun i client-side hydration. Playwright var derfor
+  nødvendigt, ikke valgfrit; `requests`-baseret hentning ville have givet
+  0 resultater uden fejl, hver gang. Selectors bekræftet mod reelt markup
+  (`article`-kort, `h3 a`-titel, relativ href i en usynlig
+  `a[aria-hidden='true']`, pris via regex mod hele kortets tekst — ingen
+  stabil pris-specifik CSS-klasse fundet). `robots.txt` tillader generel
+  crawling. Implementeret i `scraper/scraper/sources/gearloop.py`, kørt
+  reelt via `--source gearloop` — lavt volumen af RCF/Yamaha-udbud på
+  hentningstidspunktet (0 relevante annoncer, ét fravalgt "köpes"-opslag for
+  en anden model), men kilden virker og er klar til at fange fremtidigt
+  udbud.
+- **Thomann nypris → BYG-JA (skitse), delvist bygget:** Parsing af
+  `.price-and-availability .price-wrapper .price` bekræftet at virke
+  uændret på den almindelige (ikke B-Stock) produktside — testet reelt mod
+  `thomann.de/de/rcf_art_910_a.htm` (579 € → 4.319,34 kr med
+  `currency.eur_dkk`). Implementeret som rent display-anker i
+  `scraper/scraper/thomann_new_price.py` (egen tabel
+  `thomann_new_price_ref`, upsert pr. model — IKKE input til
+  percentil-klassifikationen), med Worker-endpoint
+  `GET /api/thomann-new-price` og en linje i frontend'en. Kun ÉN model er
+  kortlagt (910A) — forsøg på at bekræfte URL-slugs for de øvrige 7 modeller
+  (710A/708A/SUB705/712A + Yamaha DXR8/10/12/15) i en hurtig burst udløste
+  Thomanns rate-limiter (429) på de fleste af dem, plus to reelle 404
+  (forkert gættet slug-mønster) og én uafklaret 301-redirect. Konklusion:
+  mønsteret virker, men resten af model→URL-mapningen skal bekræftes
+  ENKELTVIS med god tid imellem forespørgslerne — ikke en burst — for ikke
+  at blive rate-limitet igen. `MODEL_NEW_PRICE_URLS`-dictet i
+  `thomann_new_price.py` er allerede struktureret til at tage flere modeller
+  uden kodeændringer, når/hvis flere slugs bekræftes.
+- **Facebook → BEVIDST UDELUKKET, som forventet:** Ingen ny research ud over
+  det allerede dokumenterede — ToS-forbud + login-mur + aggressiv anti-bot
+  gør risiko/værdi-forholdet uacceptabelt for et personligt værktøj. Ingen
+  kode bygget. Brugeren kan i stedet bruge Facebooks egne "gemte
+  søgninger"/notifikationer manuelt.
+- **Samlet prioritet for evt. videre arbejde:** (1) Thomann nypris — bekræft
+  resten af model→URL-mapningen enkeltvis, lav risiko/indsats. (2) Gearloop
+  — ingen videre kodearbejde nødvendigt, men genbesøg volumen om nogle
+  måneder. (3) Facebook — forfølg ikke.

@@ -23,6 +23,7 @@ from scraper_core.logging_setup import configure_logging
 from scraper_core.sync import sync_pending
 from scraper_core.turso_client import TursoClient
 
+from .pairs import compute_mixed_pairs, sync_mixed_pairs_to_turso
 from .pipeline import TURSO_SCHEMA, run_source
 from .rcf_config import load_config
 from .search_terms import load_search_terms
@@ -109,6 +110,24 @@ def _run_locked(settings: Settings) -> int:
                         total_changed += changed
 
                     synced = sync_pending(store, turso)
+
+                    # F6: "blandet par"-alarm - ren efterbehandling af listings vi
+                    # allerede har, ingen ny datahentning. Genberegnes fuldt hver
+                    # køring (ikke akkumulerende), så den altid afspejler den
+                    # nuværende bestand af aktive enkeltannoncer.
+                    eu_country_codes = set(rcf_config.get("import_costs", {}).get(
+                        "eu_country_codes", []
+                    ))
+                    pairs = compute_mixed_pairs(
+                        store.connection,
+                        rcf_config["thresholds"],
+                        rcf_config["mk1_beater"],
+                        rcf_config.get("mixed_pair", {}),
+                        eu_country_codes,
+                    )
+                    sync_mixed_pairs_to_turso(turso, pairs)
+                    if pairs:
+                        logger.info("mixed_pairs: %d blandet-par-mulighed(er) fundet", len(pairs))
                 logger.info(
                     "run complete: %d raw across %d source(s), %d new/changed, %d synced to Turso",
                     total_raw, len(enabled_sources), total_changed, synced,

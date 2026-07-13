@@ -308,6 +308,31 @@
     .error-text { color: var(--bad); font-size: 0.85rem; padding: 0 16px; }
     .empty-state { padding: 40px 16px; text-align: center; color: var(--text-muted); }
 
+    /* F6: "blandet par"-alarm */
+    .mixed-pair-card { border: 2px solid var(--fair); background: var(--fair-bg); padding: 14px 16px; }
+    .mixed-pair-card h2 {
+      margin: 0 0 10px;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+    }
+    .mixed-pair-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .mixed-pair-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 0.83rem;
+    }
+    .mixed-pair-item .pair-summary { font-weight: 700; margin-bottom: 6px; }
+    .mixed-pair-item .pair-summary.under-target { color: var(--good); }
+    .mixed-pair-item .pair-summary.over-target { color: var(--fair); }
+    .mixed-pair-item .pair-links { display: flex; gap: 14px; flex-wrap: wrap; }
+    .mixed-pair-item .pair-links a { color: var(--accent); text-decoration: none; }
+    .mixed-pair-item .pair-links a:hover { text-decoration: underline; }
+
     /* Mobile: table -> stacked cards. Each <tr> becomes a card, each <td> a
        labelled row within it (data-label supplies the label via ::before) -
        keeps price/link reachable without horizontal scrolling. */
@@ -378,6 +403,11 @@
 
     <div class="card" id="run-banner-card" style="display: none">
       <p id="run-banner" class="run-banner"></p>
+    </div>
+
+    <div class="card mixed-pair-card" id="mixed-pairs-card" style="display: none">
+      <h2>🧩 Blandet par muligt</h2>
+      <ul class="mixed-pair-list" id="mixed-pairs-list"></ul>
     </div>
 
     <div class="card">
@@ -890,12 +920,63 @@
       }, 45000);
     });
 
+    // F6: "blandet par"-alarm - to billige singler af samme model+generation
+    // der tilsammen rammer par-prismålet. Genberegnes af scraperen ved hver
+    // køring (se pairs.py); denne funktion bare henter og viser resultatet.
+    async function loadMixedPairs() {
+      const res = await fetch(`${API_BASE}/api/mixed-pairs`, { headers: authHeaders() });
+      if (!res.ok) return;
+      const { mixedPairs } = await res.json();
+      const card = document.getElementById("mixed-pairs-card");
+      const list = document.getElementById("mixed-pairs-list");
+      list.innerHTML = "";
+
+      if (!mixedPairs || mixedPairs.length === 0) {
+        card.style.display = "none";
+        return;
+      }
+      card.style.display = "block";
+
+      for (const pair of mixedPairs) {
+        const li = document.createElement("li");
+        li.className = "mixed-pair-item";
+
+        const underTarget = pair.distance_to_target_dkk <= 0;
+        const summary = document.createElement("div");
+        summary.className = `pair-summary ${underTarget ? "under-target" : "over-target"}`;
+        const combined = Math.round(pair.combined_price_dkk);
+        const target = Math.round(pair.target_price_dkk);
+        const distance = Math.round(Math.abs(pair.distance_to_target_dkk));
+        summary.textContent = underTarget
+          ? `${pair.model.toUpperCase()} ${pair.gen}: ${combined} kr samlet — ${distance} kr under mål (${target} kr)`
+          : `${pair.model.toUpperCase()} ${pair.gen}: ${combined} kr samlet — ${distance} kr over mål (${target} kr)`;
+        li.appendChild(summary);
+
+        const links = document.createElement("div");
+        links.className = "pair-links";
+        for (const [title, url, source] of [
+          [pair.title_1, pair.url_1, pair.source_1],
+          [pair.title_2, pair.url_2, pair.source_2],
+        ]) {
+          const a = document.createElement("a");
+          a.href = url ?? "#";
+          a.target = "_blank";
+          a.rel = "noopener";
+          a.textContent = `${title ?? "annonce"} (${source ?? ""})`;
+          links.appendChild(a);
+        }
+        li.appendChild(links);
+        list.appendChild(li);
+      }
+    }
+
     (async () => {
       const me = await requireSession();
       if (!me) return;
       document.getElementById("whoami").textContent = me.username;
       await loadListings();
       await loadSearchTerms();
+      await loadMixedPairs();
       const status = await refreshStatus();
       if (status && String(status.status || "").toLowerCase().includes("kører")) {
         document.getElementById("run-now-btn").disabled = true;

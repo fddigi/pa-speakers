@@ -65,3 +65,24 @@ CREATE TABLE IF NOT EXISTS control (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 INSERT OR IGNORE INTO control (id) VALUES (1);
+
+-- F6: "blandet par"-alarm. Fuldt genberegnet af scraper/scraper/pairs.py ved
+-- hver scraper-køring (ikke akkumulerende) - se worker/src/index.ts's
+-- /api/mixed-pairs endpoint.
+CREATE TABLE IF NOT EXISTS mixed_pairs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    model TEXT NOT NULL,
+    gen TEXT NOT NULL,
+    item_key_1 TEXT NOT NULL,
+    item_key_2 TEXT NOT NULL,
+    title_1 TEXT,
+    title_2 TEXT,
+    url_1 TEXT,
+    url_2 TEXT,
+    source_1 TEXT,
+    source_2 TEXT,
+    combined_price_dkk REAL NOT NULL,
+    target_price_dkk REAL NOT NULL,
+    distance_to_target_dkk REAL NOT NULL,
+    computed_at TEXT NOT NULL
+);

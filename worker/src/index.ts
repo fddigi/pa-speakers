@@ -175,6 +175,31 @@ app.post("/api/trigger", requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
+// --- F6: "blandet par"-alarm. Fuldt genberegnet af scraper/scraper/pairs.py
+// ved hver scraper-køring (ikke akkumulerende) - dette endpoint læser bare
+// den nuværende bestand, sorteret bedste-først (mindste afstand til mål). ---
+app.get("/api/mixed-pairs", requireAuth, async (c) => {
+  const db = getDbClient(c.env);
+  // Idempotent: harmless if the scraper has already created this (it will
+  // have, after its first F6-aware run) - avoids a confusing "no such table"
+  // error if this endpoint is hit before that.
+  await db.execute(
+    `CREATE TABLE IF NOT EXISTS mixed_pairs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      model TEXT NOT NULL, gen TEXT NOT NULL,
+      item_key_1 TEXT NOT NULL, item_key_2 TEXT NOT NULL,
+      title_1 TEXT, title_2 TEXT, url_1 TEXT, url_2 TEXT,
+      source_1 TEXT, source_2 TEXT,
+      combined_price_dkk REAL NOT NULL, target_price_dkk REAL NOT NULL,
+      distance_to_target_dkk REAL NOT NULL, computed_at TEXT NOT NULL
+    )`,
+  );
+  const result = await db.execute(
+    "SELECT * FROM mixed_pairs ORDER BY distance_to_target_dkk ASC",
+  );
+  return c.json({ mixedPairs: result.rows });
+});
+
 // --- Data endpoints against the `listings` table (matches
 // scraper/scraper/sources/*.py and worker/migrations/0001_init.sql). Migrated from
 // the PA SPEAKERS project's read-only dashboard.html - this is display-only, so

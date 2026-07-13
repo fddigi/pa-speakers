@@ -129,6 +129,13 @@ thresholds:
 mk1_beater:
   godt_koeb_max: 2500
 
+# F6: "Blandet par"-alarm -- to billige singler af samme model+generation kan
+# tilsammen ramme par-prismålet (thresholds.<key>.godt_koeb_max), selvom ingen
+# enkelt annonce gør det alene. Se scraper/scraper/pairs.py.
+mixed_pair:
+  same_region_only: true   # par kun mellem singler fra samme region (EU/EU, eller samme ikke-EU-land) -- undgår dobbelt international fragt
+  near_miss_pct: 15        # vis også par op til 15% over mål, ikke kun par der rammer det
+
 # Prioritetsrækkefølge ved sortering af flere samtidige hits (lavere tal = højere prioritet)
 priority_order:
   - key: "910a"

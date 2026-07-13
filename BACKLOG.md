@@ -11,18 +11,16 @@
 ## Prioriteret rækkefølge (næste øverst)
 
 ```
-1. F4   eBay.de som kilde            WSJF 1.9  TODO
-2. F9   Kategorisering af søgninger  WSJF 1.4  TODO
+1. F9   Kategorisering af søgninger  WSJF 1.4  TODO
 ```
 
-F6, F8, F7, F11, F10 og F5 er leveret — se "Leveret" nedenfor.
+F6, F8, F7, F11, F10, F5 og F4 er leveret — se "Leveret" nedenfor. F4 er
+dog INAKTIV indtil brugeren selv sætter EBAY_APP_ID/EBAY_CERT_ID (se
+README.md).
 
 ## Scoring-detaljer
 
 ```
-F4  eBay.de som kilde
-    BV 7  TC 4  RR 4  CoD 15  Size 8  WSJF 1.9
-
 F9  Kategorisering af søgninger
     BV 5  TC 2  RR 3  CoD 10  Size 7  WSJF 1.4
     Cross-cutting (scraper + worker + frontend + TO skemamigreringer).
@@ -81,6 +79,9 @@ F9  Kategorisering af søgninger
             ikke graf), GET /api/listings/:itemKey/context
 2026-07-13  F5: Prisfalds-detektion -- append-only price_history,
             "↓ X% (Y dage siden)" vist inline i Pris/enhed-kolonnen
+2026-07-13  F4: eBay.de som kilde -- sources/ebay.py bygget og
+            testet (graceful skip uden nøgle, auktioner tvinges
+            UKENDT), kræver brugerens egen EBAY_APP_ID/CERT_ID
 ```
 
 Se git-historik/tidligere samtale for fulde detaljer pr. leverance.

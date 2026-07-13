@@ -30,7 +30,7 @@ from .price_history import sync_price_history_to_turso
 from .rcf_config import load_config
 from .search_terms import load_search_terms
 from .source_cadence import SOURCE_STATE_SCHEMA, mark_source_run, should_run_source
-from .sources import blocket, dba, gearloop, kleinanzeigen, reverb, thomann
+from .sources import blocket, dba, ebay, gearloop, kleinanzeigen, reverb, thomann
 from .thomann_new_price import fetch_new_prices, sync_thomann_new_price_to_turso
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ SOURCE_MODULES = {
     "blocket": blocket,
     "dba": dba,
     "gearloop": gearloop,
+    "ebay": ebay,
 }
 
 # Two independent launchd jobs can start a run at (almost) the same moment:

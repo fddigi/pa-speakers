@@ -184,7 +184,17 @@ er udækket.
 **Risici:** Størst job; nøgle-afhængighed; eBay rate limits (5000 kald/dag på
 gratis tier — rigeligt).
 
----
+**Leveret (2026-07-13):** `scraper/scraper/sources/ebay.py` bygget efter
+specen — OAuth2 client-credentials (token kun i memory), Browse API mod
+`EBAY_DE`, EUR→DKK via eksisterende `to_dkk`, `origin_country_code` fra
+`itemLocation.country`. Auktioner (`buyingOptions` indeholder `"AUCTION"`)
+kortslutter `pipeline.py`'s klassifikation direkte til `UKENDT` ("auktion,
+slutpris ukendt") FØR `classify_dynamic` overhovedet kaldes — verificeret med
+en simuleret 100 EUR-auktion (746 kr), som ellers ville have ramt GODT KØB.
+`EBAY_APP_ID`/`EBAY_CERT_ID` mangler stadig (brugerens egen konto på
+developer.ebay.com, kan ikke oprettes af mig) — kilden logger og springer sig
+selv gracefully over uden nøgle, verificeret via `--source ebay`. Se
+README.md's nye "eBay.de-kilde"-afsnit for opsætning.
 
 ## F5: Prisfalds-detektion
 

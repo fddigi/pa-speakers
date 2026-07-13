@@ -8,6 +8,9 @@ sources:
   thomann: true
   dba: true
   gearloop: true  # F11-spike: svensk brugtmarkedsplads, samme SE-marked som Blocket
+  # F4: eBay.de -- kræver EBAY_APP_ID/EBAY_CERT_ID i .env (se README.md). Uden dem
+  # logger kilden og springes gracefully over hver køring (main.py fejler ikke).
+  ebay: true
 
 # F7: per-kilde min-interval (timer) -- launchd/"Kør nu" kan trigge alle kilder
 # hyppigt, men Kleinanzeigen/Blocket øger blokeringsrisiko ved for tit hentning.

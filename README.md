@@ -2,8 +2,9 @@
 
 Overvåger brugte RCF ART (708-A/710-A/910-A/712/SUB705) og Yamaha DXR
 (8/10/12/15) PA-højttalere på tværs af Reverb, Thomann, Kleinanzeigen.de,
-Blocket.se og DBA.dk — deduperer lokalt, synces til Turso, vises i et
-sorterbart/filtrerbart dashboard bag login. Migreret fra det oprindelige,
+Blocket.se, DBA.dk, Gearloop.se og (valgfrit, kræver egen nøgle) eBay.de —
+deduperer lokalt, synces til Turso, vises i et sorterbart/filtrerbart
+dashboard bag login. Migreret fra det oprindelige,
 selvstændige `PA SPEAKERS`-projekt til
 [`fddigi/scraper-boilerplate`](https://github.com/fddigi/scraper-boilerplate)'s
 delta-sync-mønster — se `pa-speakers-migration-findings.md` for den fulde
@@ -139,6 +140,28 @@ npx tsc --noEmit   # typecheck
 npx vitest run     # unit-tests for password-hash / session-cookie-logik
 npx wrangler dev    # lokal dev-server (kræver ikke live Cloudflare-deploy)
 ```
+
+## eBay.de-kilde (F4, valgfri)
+
+`scraper/scraper/sources/ebay.py` bruger eBays officielle Browse API
+(OAuth2 client-credentials, ingen bruger-login) mod `marketplace_id=EBAY_DE`.
+Kræver en gratis nøgle, som du selv skal oprette (kan ikke automatiseres for
+dig, da det kræver din egen eBay-konto):
+
+1. Opret en konto på [developer.ebay.com](https://developer.ebay.com) hvis du
+   ikke allerede har en.
+2. Gå til "My Account" → "Application Keys" → opret et keyset (production).
+3. Kopiér "App ID (Client ID)" og "Cert ID (Client Secret)" til `.env`:
+   ```
+   EBAY_APP_ID=...
+   EBAY_CERT_ID=...
+   ```
+
+Uden disse to variabler logger kilden en besked og springer sig selv over
+hver køring — resten af scraperen kører helt normalt (samme mønster som en
+umsat `HEALTHCHECK_URL`). Auktioner (`buyingOptions` indeholder `"AUCTION"`)
+klassificeres altid som `UKENDT` ("auktion, slutpris ukendt") uanset
+nuværende bud — se `pipeline.py`.
 
 ## Secrets-hygiejne
 

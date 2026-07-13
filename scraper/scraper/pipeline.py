@@ -149,16 +149,24 @@ def run_source(
                 (item_key,),
             ).fetchone()
 
-            # exclude_id=item_key: without this, an ad that matches multiple search
-            # terms gets processed more than once per run, and its SECOND pass would
-            # see its own just-inserted row in the historical percentile query,
-            # possibly flipping its own classification and triggering a spurious
-            # re-sync. Found 2026-07-12 via a Blocket ad queued 3x in one run for
-            # what should have been 1 insert + 0 real changes.
-            classification, method = classify.classify_dynamic(
-                listing, store.connection, config["thresholds"], config["mk1_beater"],
-                exclude_id=item_key,
-            )
+            # F4: eBay-auktioner har INGEN landed pris før auktionen slutter -- et
+            # lavt nuværende bud er ikke et reelt køb-nu-tilbud, og skal ALDRIG
+            # kunne klassificeres GODT KØB alene på det. Kortslutter helt uden om
+            # classify_dynamic (som ikke kender begrebet "auktion").
+            if listing.get("raw", {}).get("is_auction"):
+                classification, method = "UKENDT", "auktion (slutpris ukendt)"
+            else:
+                # exclude_id=item_key: without this, an ad that matches multiple
+                # search terms gets processed more than once per run, and its
+                # SECOND pass would see its own just-inserted row in the
+                # historical percentile query, possibly flipping its own
+                # classification and triggering a spurious re-sync. Found
+                # 2026-07-12 via a Blocket ad queued 3x in one run for what
+                # should have been 1 insert + 0 real changes.
+                classification, method = classify.classify_dynamic(
+                    listing, store.connection, config["thresholds"], config["mk1_beater"],
+                    exclude_id=item_key,
+                )
 
             payload = {
                 "item_key": item_key,

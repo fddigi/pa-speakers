@@ -11,6 +11,7 @@ or through the launchd job installed by `make install-launchd`.
 
 from __future__ import annotations
 
+import argparse
 import fcntl
 import logging
 import sys
@@ -27,6 +28,7 @@ from .pairs import compute_mixed_pairs, sync_mixed_pairs_to_turso
 from .pipeline import TURSO_SCHEMA, run_source
 from .rcf_config import load_config
 from .search_terms import load_search_terms
+from .source_cadence import SOURCE_STATE_SCHEMA, mark_source_run, should_run_source
 from .sources import blocket, dba, kleinanzeigen, reverb, thomann
 
 logger = logging.getLogger(__name__)
@@ -50,7 +52,7 @@ SOURCE_MODULES = {
 LOCK_PATH = Path("data/.scraper.lock")
 
 
-def run() -> int:
+def run(force_source: str | None = None) -> int:
     settings = get_settings()
     configure_logging(settings.log_level)
 
@@ -69,23 +71,27 @@ def run() -> int:
         return 0
 
     try:
-        return _run_locked(settings)
+        return _run_locked(settings, force_source=force_source)
     finally:
         fcntl.flock(lock_file, fcntl.LOCK_UN)
         lock_file.close()
 
 
-def _run_locked(settings: Settings) -> int:
+def _run_locked(settings: Settings, force_source: str | None = None) -> int:
     rcf_config = load_config()
+    min_interval_hours = rcf_config.get("sources_min_interval_hours", {})
 
     try:
         with LocalStore(settings.local_sqlite_path) as store:
+            store.executescript(SOURCE_STATE_SCHEMA)
             total_raw = 0
             total_changed = 0
 
             enabled_sources = [
                 name for name, enabled in rcf_config.get("sources", {}).items() if enabled
             ]
+            if force_source is not None:
+                enabled_sources = [force_source]
 
             if settings.turso_configured:
                 with TursoClient(settings) as turso:
@@ -105,7 +111,15 @@ def _run_locked(settings: Settings) -> int:
                         if module is None:
                             logger.warning("Unknown source configured: %s, skipping", name)
                             continue
+                        # F7: per-kilde min-interval. --source <navn> (force_source)
+                        # ignorerer altid dette - manuel fejlsøgning skal altid køre.
+                        if not should_run_source(
+                            store.connection, name, min_interval_hours,
+                            force=force_source is not None,
+                        ):
+                            continue
                         raw_count, changed = run_source(store, name, module.fetch, rcf_config)
+                        mark_source_run(store.connection, name)
                         total_raw += raw_count
                         total_changed += changed
 
@@ -143,7 +157,13 @@ def _run_locked(settings: Settings) -> int:
                     if module is None:
                         logger.warning("Unknown source configured: %s, skipping", name)
                         continue
+                    if not should_run_source(
+                        store.connection, name, min_interval_hours,
+                        force=force_source is not None,
+                    ):
+                        continue
                     raw_count, changed = run_source(store, name, module.fetch, rcf_config)
+                    mark_source_run(store.connection, name)
                     total_raw += raw_count
                     total_changed += changed
 
@@ -161,5 +181,20 @@ def _run_locked(settings: Settings) -> int:
     return 0
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--source",
+        choices=sorted(SOURCE_MODULES),
+        help=(
+            "Run only this one source, ignoring its sources_min_interval_hours "
+            "cadence limit entirely (F7) - for manual debugging, which should "
+            "always be able to run regardless of when the source last ran."
+        ),
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    sys.exit(run())
+    args = _parse_args()
+    sys.exit(run(force_source=args.source))

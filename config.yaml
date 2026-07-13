@@ -8,6 +8,14 @@ sources:
   thomann: true
   dba: true
 
+# F7: per-kilde min-interval (timer) -- launchd/"Kør nu" kan trigge alle kilder
+# hyppigt, men Kleinanzeigen/Blocket øger blokeringsrisiko ved for tit hentning.
+# Kilder der ikke er nævnt her har ingen min-interval (kører hver gang de er
+# aktiveret). Ignoreres altid ved `--source <navn>` (manuel fejlsøgning).
+sources_min_interval_hours:
+  kleinanzeigen: 4
+  blocket: 4
+
 search_terms:
   primary:
     - "RCF ART 910"

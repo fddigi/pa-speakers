@@ -200,6 +200,24 @@ app.get("/api/mixed-pairs", requireAuth, async (c) => {
   return c.json({ mixedPairs: result.rows });
 });
 
+// --- F11-spike: Thomann nypris-reference. Rent DISPLAY-ANKER ved siden af
+// brugtannoncer (scraper/scraper/thomann_new_price.py), IKKE input til
+// klassifikationen - se FEATURES.md F11. Upsert pr. model, ikke fuld
+// genberegning som mixed_pairs, så en fejlet Thomann-hentning aldrig sletter
+// en tidligere kendt reference. ---
+app.get("/api/thomann-new-price", requireAuth, async (c) => {
+  const db = getDbClient(c.env);
+  await db.execute(
+    `CREATE TABLE IF NOT EXISTS thomann_new_price_ref (
+      model_key TEXT PRIMARY KEY,
+      url TEXT NOT NULL, price_eur REAL NOT NULL, price_dkk REAL NOT NULL,
+      checked_at TEXT NOT NULL
+    )`,
+  );
+  const result = await db.execute("SELECT * FROM thomann_new_price_ref");
+  return c.json({ newPriceRefs: result.rows });
+});
+
 // --- Data endpoints against the `listings` table (matches
 // scraper/scraper/sources/*.py and worker/migrations/0001_init.sql). Migrated from
 // the PA SPEAKERS project's read-only dashboard.html - this is display-only, so

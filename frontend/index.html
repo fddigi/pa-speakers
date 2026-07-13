@@ -339,6 +339,7 @@
     .mixed-pair-item .pair-links { display: flex; gap: 14px; flex-wrap: wrap; }
     .mixed-pair-item .pair-links a { color: var(--accent); text-decoration: none; }
     .mixed-pair-item .pair-links a:hover { text-decoration: underline; }
+    .new-price-ref { font-size: 0.85em; color: var(--text-muted); margin: 4px 0 0; }
 
     /* Mobile: table -> stacked cards. Each <tr> becomes a card, each <td> a
        labelled row within it (data-label supplies the label via ::before) -
@@ -416,6 +417,8 @@
       <h2>🧩 Blandet par muligt</h2>
       <ul class="mixed-pair-list" id="mixed-pairs-list"></ul>
     </div>
+
+    <div id="new-price-refs"></div>
 
     <div class="card">
       <div class="stats-header">
@@ -1004,6 +1007,24 @@
       }
     }
 
+    // F11-spike: Thomann nypris-reference - rent display-anker ("nypris: X kr"),
+    // ikke input til klassifikationen. Se scraper/scraper/thomann_new_price.py.
+    async function loadNewPriceRefs() {
+      const res = await fetch(`${API_BASE}/api/thomann-new-price`, { headers: authHeaders() });
+      if (!res.ok) return;
+      const { newPriceRefs } = await res.json();
+      const container = document.getElementById("new-price-refs");
+      container.innerHTML = "";
+      if (!newPriceRefs || newPriceRefs.length === 0) return;
+
+      const p = document.createElement("p");
+      p.className = "new-price-ref";
+      p.textContent = newPriceRefs
+        .map((r) => `Thomann nypris ${r.model_key.toUpperCase()}: ${Math.round(r.price_dkk)} kr`)
+        .join(" · ");
+      container.appendChild(p);
+    }
+
     (async () => {
       const me = await requireSession();
       if (!me) return;
@@ -1011,6 +1032,7 @@
       await loadListings();
       await loadSearchTerms();
       await loadMixedPairs();
+      await loadNewPriceRefs();
       const status = await refreshStatus();
       if (status && String(status.status || "").toLowerCase().includes("kører")) {
         document.getElementById("run-now-btn").disabled = true;

@@ -86,3 +86,14 @@ CREATE TABLE IF NOT EXISTS mixed_pairs (
     distance_to_target_dkk REAL NOT NULL,
     computed_at TEXT NOT NULL
 );
+
+-- F11-spike: Thomann nypris-reference (display-anker, ikke klassifikations-
+-- input). Upsert pr. model_key af scraper/scraper/thomann_new_price.py - se
+-- worker/src/index.ts's /api/thomann-new-price endpoint.
+CREATE TABLE IF NOT EXISTS thomann_new_price_ref (
+    model_key TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
+    price_eur REAL NOT NULL,
+    price_dkk REAL NOT NULL,
+    checked_at TEXT NOT NULL
+);

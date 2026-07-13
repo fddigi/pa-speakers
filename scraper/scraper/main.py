@@ -29,7 +29,8 @@ from .pipeline import TURSO_SCHEMA, run_source
 from .rcf_config import load_config
 from .search_terms import load_search_terms
 from .source_cadence import SOURCE_STATE_SCHEMA, mark_source_run, should_run_source
-from .sources import blocket, dba, kleinanzeigen, reverb, thomann
+from .sources import blocket, dba, gearloop, kleinanzeigen, reverb, thomann
+from .thomann_new_price import fetch_new_prices, sync_thomann_new_price_to_turso
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ SOURCE_MODULES = {
     "kleinanzeigen": kleinanzeigen,
     "blocket": blocket,
     "dba": dba,
+    "gearloop": gearloop,
 }
 
 # Two independent launchd jobs can start a run at (almost) the same moment:
@@ -142,6 +144,12 @@ def _run_locked(settings: Settings, force_source: str | None = None) -> int:
                     sync_mixed_pairs_to_turso(turso, pairs)
                     if pairs:
                         logger.info("mixed_pairs: %d blandet-par-mulighed(er) fundet", len(pairs))
+
+                    # F11-spike: Thomann nypris-reference - rent DISPLAY-ANKER,
+                    # ikke input til klassifikationen (se thomann_new_price.py).
+                    eur_dkk = rcf_config.get("currency", {}).get("eur_dkk", 7.46)
+                    new_price_refs = fetch_new_prices(eur_dkk)
+                    sync_thomann_new_price_to_turso(turso, new_price_refs)
                 logger.info(
                     "run complete: %d raw across %d source(s), %d new/changed, %d synced to Turso",
                     total_raw, len(enabled_sources), total_changed, synced,

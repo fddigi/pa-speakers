@@ -7,6 +7,7 @@ sources:
   reverb: true
   thomann: true
   dba: true
+  gearloop: true  # F11-spike: svensk brugtmarkedsplads, samme SE-marked som Blocket
 
 # F7: per-kilde min-interval (timer) -- launchd/"Kør nu" kan trigge alle kilder
 # hyppigt, men Kleinanzeigen/Blocket øger blokeringsrisiko ved for tit hentning.

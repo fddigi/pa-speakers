@@ -220,6 +220,33 @@ genberegnes — kun observationer).
 **Risici:** upsert-semantikændring rammer alt — kræver omhyggelig test af
 idempotens (kørsel 2 uden prisændringer = 0 notifikationer, 0 nye history-rækker).
 
+**Leveret (2026-07-13, tilpasset den migrerede scraper-core-arkitektur):**
+
+Denne spec er fra FØR migreringen (nævner `db.py`/`monitor.py`/`notify.py`,
+som ikke findes i den nuværende arkitektur). Kernefundet der ændrede
+omfanget: `scraper_core.local_db.LocalStore.upsert_if_changed` +
+`pipeline.py`'s `ON CONFLICT DO UPDATE` håndterer ALLEREDE prisændringer
+korrekt (opdaterer `listings`-rækken, bevarer `first_seen`) — der var derfor
+IKKE brug for en "upsert-semantikændring", kun en observation TILFØJET oveni
+det eksisterende flow.
+
+- `scraper/scraper/price_history.py` (ny): append-only `price_history`-tabel,
+  synces direkte til Turso (aldrig genberegnet/slettet, modsat F6's
+  `mixed_pairs`).
+- `pipeline.py`: fanger den eksisterende rækkes `price_per_unit_dkk`/
+  `classification` FØR upsert'en overskriver den; ved et REELT fald
+  (strengt `<`, ikke enhver ændring) tilføjes en `price_history`-hændelse
+  med `pct_change` + gammel/ny klassifikation. `run_source()` returnerer nu
+  `(raw_count, changed, price_drop_events)` i stedet for et 2-tuple.
+- Ingen separat `notify.py` findes i den migrerede arkitektur — webapp'en
+  ER notifikationsoverfladen. `GET /api/listings` indlejrer seneste
+  prisfald pr. annonce (`latest_price_drop_pct`/`_at`, korreleret subquery,
+  undgår N+1) og frontend'en viser "↓ 12% (8 dage siden)" direkte i
+  Pris/enhed-kolonnen.
+- Verificeret: simuleret et prisfald (5000 → 4200 kr, FAIR → GODT KØB) mod
+  en in-memory `LocalStore` — korrekt `pct_change=-16.0` og `first_seen`
+  forblev uændret efter upsert'en.
+
 ---
 
 ## F6: "Blandet par"-alarm

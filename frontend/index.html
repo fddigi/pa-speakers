@@ -340,6 +340,7 @@
     .mixed-pair-item .pair-links a { color: var(--accent); text-decoration: none; }
     .mixed-pair-item .pair-links a:hover { text-decoration: underline; }
     .new-price-ref { font-size: 0.85em; color: var(--text-muted); margin: 4px 0 0; }
+    .price-drop-badge { color: var(--good); font-size: 0.85em; font-weight: 600; white-space: nowrap; }
     .context-panel {
       position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
       display: flex; align-items: flex-start; justify-content: center;
@@ -801,19 +802,41 @@
         tr.appendChild(classCell);
 
         const priceStr = row.price_per_unit_dkk != null ? `${Math.round(row.price_per_unit_dkk)} kr` : "?";
-        const cellDefs = [
+        // Rækkefølge SKAL matche <thead>: Model, Gen, Antal, Pris/enhed, Kilde.
+        const beforePriceCells = [
           ["Model", (row.model ?? "?").toUpperCase()],
           ["Gen", row.gen ?? "uoplyst"],
           ["Antal", row.quantity ?? 1],
-          ["Pris/enhed", priceStr],
-          ["Kilde", row.source ?? ""],
         ];
-        for (const [label, value] of cellDefs) {
+        for (const [label, value] of beforePriceCells) {
           const cell = document.createElement("td");
           cell.dataset.label = label;
           cell.textContent = value; // textContent, not innerHTML - avoids XSS from scraped content
           tr.appendChild(cell);
         }
+
+        const priceCell = document.createElement("td");
+        priceCell.dataset.label = "Pris/enhed";
+        priceCell.appendChild(document.createTextNode(priceStr));
+        // F5: prisfalds-detektion - se pipeline.py/price_history.py. Kun reelle
+        // prisfald logges (aldrig prisstigninger eller andre ændringer), så
+        // latest_price_drop_pct er altid negativ når den findes.
+        if (row.latest_price_drop_pct != null) {
+          const dropBadge = document.createElement("span");
+          dropBadge.className = "price-drop-badge";
+          const daysAgo = Math.max(0, Math.floor(
+            (Date.now() - new Date(row.latest_price_drop_at).getTime()) / (1000 * 60 * 60 * 24)
+          ));
+          const daysText = daysAgo === 0 ? "i dag" : `${daysAgo} dag${daysAgo === 1 ? "" : "e"} siden`;
+          dropBadge.textContent = ` ↓ ${Math.abs(row.latest_price_drop_pct)}% (${daysText})`;
+          priceCell.appendChild(dropBadge);
+        }
+        tr.appendChild(priceCell);
+
+        const kildeCell = document.createElement("td");
+        kildeCell.dataset.label = "Kilde";
+        kildeCell.textContent = row.source ?? "";
+        tr.appendChild(kildeCell);
 
         // Title is the primary action (opens the listing) - critique found the
         // separate far-right "Link" column buried the one thing users actually

@@ -11,19 +11,15 @@
 ## Prioriteret rækkefølge (næste øverst)
 
 ```
-1. F5   Prisfalds-detektion          WSJF 3.0  TODO
-2. F4   eBay.de som kilde            WSJF 1.9  TODO
-3. F9   Kategorisering af søgninger  WSJF 1.4  TODO
+1. F4   eBay.de som kilde            WSJF 1.9  TODO
+2. F9   Kategorisering af søgninger  WSJF 1.4  TODO
 ```
 
-F6, F8, F7, F11 og F10 er leveret — se "Leveret" nedenfor.
+F6, F8, F7, F11, F10 og F5 er leveret — se "Leveret" nedenfor.
 
 ## Scoring-detaljer
 
 ```
-F5  Prisfalds-detektion
-    BV 6  TC 5  RR 4  CoD 15  Size 5  WSJF 3.0
-
 F4  eBay.de som kilde
     BV 7  TC 4  RR 4  CoD 15  Size 8  WSJF 1.9
 
@@ -83,6 +79,8 @@ F9  Kategorisering af søgninger
 2026-07-13  F10: Spike prishistorik -- ingen ægte tidsserie mulig,
             byg klikbart klassifikations-drilldown-panel (tekst,
             ikke graf), GET /api/listings/:itemKey/context
+2026-07-13  F5: Prisfalds-detektion -- append-only price_history,
+            "↓ X% (Y dage siden)" vist inline i Pris/enhed-kolonnen
 ```
 
 Se git-historik/tidligere samtale for fulde detaljer pr. leverance.

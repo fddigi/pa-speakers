@@ -26,6 +26,7 @@ from scraper_core.turso_client import TursoClient
 
 from .pairs import compute_mixed_pairs, sync_mixed_pairs_to_turso
 from .pipeline import TURSO_SCHEMA, run_source
+from .price_history import sync_price_history_to_turso
 from .rcf_config import load_config
 from .search_terms import load_search_terms
 from .source_cadence import SOURCE_STATE_SCHEMA, mark_source_run, should_run_source
@@ -108,6 +109,7 @@ def _run_locked(settings: Settings, force_source: str | None = None) -> int:
                     dynamic_terms = load_search_terms(rcf_config, turso)
                     rcf_config["search_terms"] = {"primary": dynamic_terms, "secondary": []}
 
+                    all_price_drop_events = []
                     for name in enabled_sources:
                         module = SOURCE_MODULES.get(name)
                         if module is None:
@@ -120,12 +122,24 @@ def _run_locked(settings: Settings, force_source: str | None = None) -> int:
                             force=force_source is not None,
                         ):
                             continue
-                        raw_count, changed = run_source(store, name, module.fetch, rcf_config)
+                        raw_count, changed, price_drop_events = run_source(
+                            store, name, module.fetch, rcf_config
+                        )
                         mark_source_run(store.connection, name)
                         total_raw += raw_count
                         total_changed += changed
+                        all_price_drop_events.extend(price_drop_events)
 
                     synced = sync_pending(store, turso)
+
+                    # F5: prisfalds-detektion - se pipeline.py/price_history.py.
+                    # Rent append (aldrig genberegnet), modsat mixed_pairs/F6.
+                    sync_price_history_to_turso(turso, all_price_drop_events)
+                    if all_price_drop_events:
+                        logger.info(
+                            "price_history: %d prisfald registreret",
+                            len(all_price_drop_events),
+                        )
 
                     # F6: "blandet par"-alarm - ren efterbehandling af listings vi
                     # allerede har, ingen ny datahentning. Genberegnes fuldt hver
@@ -170,7 +184,9 @@ def _run_locked(settings: Settings, force_source: str | None = None) -> int:
                         force=force_source is not None,
                     ):
                         continue
-                    raw_count, changed = run_source(store, name, module.fetch, rcf_config)
+                    raw_count, changed, _price_drop_events = run_source(
+                        store, name, module.fetch, rcf_config
+                    )
                     mark_source_run(store.connection, name)
                     total_raw += raw_count
                     total_changed += changed

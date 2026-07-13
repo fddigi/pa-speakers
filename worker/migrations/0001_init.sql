@@ -97,3 +97,18 @@ CREATE TABLE IF NOT EXISTS thomann_new_price_ref (
     price_dkk REAL NOT NULL,
     checked_at TEXT NOT NULL
 );
+
+-- F5: prisfalds-detektion. Rent append (aldrig slettet/overskrevet) af
+-- scraper/scraper/pipeline.py+price_history.py, hver gang en allerede kendt
+-- annonces price_per_unit_dkk falder. Indlejres i GET /api/listings som
+-- latest_price_drop_pct/latest_price_drop_at (korreleret subquery).
+CREATE TABLE IF NOT EXISTS price_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_key TEXT NOT NULL,
+    old_price_per_unit_dkk REAL NOT NULL,
+    new_price_per_unit_dkk REAL NOT NULL,
+    pct_change REAL NOT NULL,
+    old_classification TEXT,
+    new_classification TEXT,
+    observed_at TEXT NOT NULL
+);

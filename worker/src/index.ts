@@ -251,8 +251,28 @@ app.get("/api/listings", requireAuth, async (c) => {
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   args.push(limit);
 
+  // F5: idempotent, samme begrundelse som mixed_pairs/thomann_new_price_ref -
+  // undgår en "no such table"-fejl hvis dette endpoint rammes før scraperen
+  // nogensinde har haft et prisfald at logge.
+  await db.execute(
+    `CREATE TABLE IF NOT EXISTS price_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_key TEXT NOT NULL, old_price_per_unit_dkk REAL NOT NULL,
+      new_price_per_unit_dkk REAL NOT NULL, pct_change REAL NOT NULL,
+      old_classification TEXT, new_classification TEXT, observed_at TEXT NOT NULL
+    )`,
+  );
+
+  // F5: seneste prisfald pr. annonce indlejres direkte her (korreleret
+  // subquery) i stedet for et separat per-række endpoint - undgår N+1 kald
+  // fra frontend'en for noget der vises inline i hver tabelrække.
   const result = await db.execute({
-    sql: `SELECT * FROM listings ${where} ORDER BY first_seen DESC LIMIT ?`,
+    sql: `SELECT listings.*,
+      (SELECT pct_change FROM price_history ph
+        WHERE ph.item_key = listings.item_key ORDER BY ph.id DESC LIMIT 1) AS latest_price_drop_pct,
+      (SELECT observed_at FROM price_history ph
+        WHERE ph.item_key = listings.item_key ORDER BY ph.id DESC LIMIT 1) AS latest_price_drop_at
+      FROM listings ${where} ORDER BY first_seen DESC LIMIT ?`,
     args,
   });
   return c.json({ listings: result.rows });

@@ -81,12 +81,15 @@ def run_source(
     config: dict,
     dry_run: bool = False,
     fetch_timeout_seconds: float = 300,
-) -> tuple[int, int]:
+) -> tuple[int, int, list[dict]]:
     """Runs one source's fetch() -> normalize -> classify -> upsert_if_changed.
 
     Isolated try/except per source, matching the original monitor.py: one source's
     failure must never crash the others or the rest of the run. Returns
-    (raw_count, changed_count).
+    (raw_count, changed_count, price_drop_events) -- see F5 (BACKLOG.md): the
+    third element is a list of dicts for `price_history.py` to sync, one per
+    already-known listing whose price_per_unit_dkk just DECREASED (a genuine
+    price drop, not e.g. a quantity change or first sighting).
 
     fetch_fn() itself already gets bounded per-request timeouts (Playwright
     page.goto/wait_for_selector, requests' own timeout=) - fetch_timeout_seconds
@@ -105,6 +108,7 @@ def run_source(
     store.executescript(LOCAL_SCHEMA)
     raw_count = 0
     changed = 0
+    price_drop_events: list[dict] = []
 
     try:
         raw_listings = run_with_timeout(
@@ -136,6 +140,14 @@ def run_source(
                 source_name, listing.get("url"), listing.get("title"), listing.get("price_dkk")
             )
             first_seen = datetime.datetime.now(datetime.UTC).isoformat()
+
+            # F5: fanget FØR upsert'en nedenfor kan overskrive den - eneste sted
+            # den gamle pris/klassifikation stadig er tilgængelig, for at kunne
+            # opdage et reelt PRISFALD (ikke bare en hvilken som helst ændring).
+            previous_row = store.connection.execute(
+                "SELECT price_per_unit_dkk, classification FROM listings WHERE item_key = ?",
+                (item_key,),
+            ).fetchone()
 
             # exclude_id=item_key: without this, an ad that matches multiple search
             # terms gets processed more than once per run, and its SECOND pass would
@@ -191,6 +203,22 @@ def run_source(
             store.connection.commit()
             changed += 1
 
+            # F5: kun en reel PRISNEDSÆTTELSE tæller (strengt <, ikke bare "ændret") -
+            # udelukker fx en ren quantity- eller titel-rettelse der tilfældigvis også
+            # trigger is_new_or_changed uden at prisen faldt.
+            old_price = previous_row["price_per_unit_dkk"] if previous_row is not None else None
+            new_price = payload["price_per_unit_dkk"]
+            if old_price is not None and new_price is not None and new_price < old_price:
+                price_drop_events.append({
+                    "item_key": item_key,
+                    "old_price_per_unit_dkk": old_price,
+                    "new_price_per_unit_dkk": new_price,
+                    "pct_change": round((new_price - old_price) / old_price * 100, 1),
+                    "old_classification": previous_row["classification"],
+                    "new_classification": classification,
+                    "observed_at": first_seen,
+                })
+
         logger.info("%s: %d raw, %d new/changed", source_name, raw_count, changed)
     except SourceTimeoutError:
         # Already logged by run_with_timeout() itself (logger.warning) - avoid a
@@ -200,4 +228,4 @@ def run_source(
     except Exception:
         logger.exception("%s: source failed, skipping - other sources unaffected", source_name)
 
-    return raw_count, changed
+    return raw_count, changed, price_drop_events

@@ -340,6 +340,23 @@
     .mixed-pair-item .pair-links a { color: var(--accent); text-decoration: none; }
     .mixed-pair-item .pair-links a:hover { text-decoration: underline; }
     .new-price-ref { font-size: 0.85em; color: var(--text-muted); margin: 4px 0 0; }
+    .context-panel {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
+      display: flex; align-items: flex-start; justify-content: center;
+      padding: 40px 16px; z-index: 100; overflow-y: auto;
+    }
+    .context-panel-content {
+      position: relative; background: var(--surface); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 20px; max-width: 560px; width: 100%;
+    }
+    .context-panel-close { position: absolute; top: 12px; right: 12px; }
+    .context-panel-content h3 { margin: 0 24px 12px 0; }
+    .context-caveat { font-size: 0.85em; color: var(--text-muted); margin: 0 0 12px; }
+    .context-stats { font-weight: 600; margin: 0 0 12px; }
+    .context-list-heading { font-weight: 600; margin: 12px 0 6px; }
+    .context-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
+    .context-list a { color: var(--accent); text-decoration: none; }
+    .context-list a:hover { text-decoration: underline; }
 
     /* Mobile: table -> stacked cards. Each <tr> becomes a card, each <td> a
        labelled row within it (data-label supplies the label via ::before) -
@@ -491,6 +508,15 @@
       </div>
       <p id="count-line"></p>
       <p class="error-text" id="error"></p>
+    </div>
+  </div>
+
+  <!-- F10-spike: klassifikations-drilldown (klik på et badge i tabellen).
+       Letvægts tekst-panel, ikke en graf - se FEATURES.md F10 for hvorfor. -->
+  <div id="context-panel" class="context-panel" style="display: none">
+    <div class="context-panel-content">
+      <button type="button" id="context-panel-close" class="subtle context-panel-close">Luk ✕</button>
+      <div id="context-panel-body"></div>
     </div>
   </div>
 
@@ -646,12 +672,93 @@
       }
     }
 
-    function classificationBadge(classification) {
+    function classificationBadge(classification, itemKey) {
       const badge = document.createElement("span");
       badge.className = "badge";
       badge.dataset.class = classification;
       badge.textContent = classification;
+      if (itemKey) {
+        badge.style.cursor = "pointer";
+        badge.title = "Klik for at se grundlaget for klassifikationen";
+        badge.addEventListener("click", () => openClassificationContext(itemKey));
+      }
       return badge;
+    }
+
+    // F10-spike: klassifikations-drilldown. Konklusion (se FEATURES.md F10):
+    // vi har INGEN pris-over-tid for én annonce (unik engangsvare, ingen
+    // realiserede salgspriser) - kun fordelingen af udbudspriser bag
+    // percentil-klassifikationen. Letvægts tekst-panel i stedet for en graf,
+    // per spikens "80% værdi til 10% arbejde"-vurdering.
+    async function openClassificationContext(itemKey) {
+      const panel = document.getElementById("context-panel");
+      const body = document.getElementById("context-panel-body");
+      panel.style.display = "flex";
+      body.textContent = "Henter...";
+
+      const res = await fetch(`${API_BASE}/api/listings/${encodeURIComponent(itemKey)}/context`, {
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        body.textContent = "Kunne ikke hente grundlag for klassifikationen.";
+        return;
+      }
+      const ctx = await res.json();
+      body.innerHTML = "";
+
+      const heading = document.createElement("h3");
+      heading.textContent = `${(ctx.model ?? "?").toUpperCase()} ${ctx.gen ?? ""}`.trim();
+      body.appendChild(heading);
+
+      const caveat = document.createElement("p");
+      caveat.className = "context-caveat";
+      caveat.textContent =
+        "Bemærk: dette er UDBUDSPRISER set inden for de sidste " +
+        `${ctx.lookbackDays} dage, ikke realiserede salgspriser - annoncer der ` +
+        "stadig ligger kan allerede være solgt. Et øjebliksbillede af " +
+        "markedspopulationen, ikke en tidsserie for denne ene annonce.";
+      body.appendChild(caveat);
+
+      const stats = document.createElement("p");
+      stats.className = "context-stats";
+      const thisPriceStr = ctx.thisPriceDkk != null ? `${Math.round(ctx.thisPriceDkk)} kr` : "?";
+      if (ctx.p25 != null && ctx.p75 != null) {
+        stats.textContent =
+          `Metode: ${ctx.method} · p25 = ${Math.round(ctx.p25)} kr · ` +
+          `p75 = ${Math.round(ctx.p75)} kr · denne annonce: ${thisPriceStr}`;
+      } else {
+        stats.textContent =
+          `Metode: ${ctx.method} · for få datapunkter til percentiler ` +
+          `(kræver mindst ${ctx.minSamples}) · denne annonce: ${thisPriceStr}`;
+      }
+      body.appendChild(stats);
+
+      const listHeading = document.createElement("p");
+      listHeading.className = "context-list-heading";
+      listHeading.textContent = `Sammenlignelige annoncer (${ctx.comparables.length}):`;
+      body.appendChild(listHeading);
+
+      if (ctx.comparables.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "context-caveat";
+        empty.textContent = "Ingen andre annoncer for denne model+generation endnu.";
+        body.appendChild(empty);
+      } else {
+        const list = document.createElement("ul");
+        list.className = "context-list";
+        for (const comp of ctx.comparables) {
+          const li = document.createElement("li");
+          const price = comp.price_per_unit_dkk != null ? `${Math.round(comp.price_per_unit_dkk)} kr` : "?";
+          const a = document.createElement("a");
+          a.href = comp.url ?? "#";
+          a.target = "_blank";
+          a.rel = "noopener";
+          a.textContent = `${comp.title ?? "annonce"} — ${price} (${comp.source ?? "?"})`;
+          li.appendChild(a);
+          list.appendChild(li);
+        }
+        body.appendChild(list);
+      }
     }
 
     function renderTable() {
@@ -684,7 +791,7 @@
 
         const classCell = document.createElement("td");
         classCell.dataset.label = "Klassifikation";
-        classCell.appendChild(classificationBadge(classification));
+        classCell.appendChild(classificationBadge(classification, row.item_key));
         if (isRecent(row.first_seen)) {
           const newBadge = document.createElement("span");
           newBadge.className = "new-badge";
@@ -1024,6 +1131,15 @@
         .join(" · ");
       container.appendChild(p);
     }
+
+    document.getElementById("context-panel-close").addEventListener("click", () => {
+      document.getElementById("context-panel").style.display = "none";
+    });
+    document.getElementById("context-panel").addEventListener("click", (event) => {
+      if (event.target.id === "context-panel") {
+        document.getElementById("context-panel").style.display = "none";
+      }
+    });
 
     (async () => {
       const me = await requireSession();

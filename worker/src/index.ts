@@ -274,4 +274,80 @@ app.get("/api/listings/:itemKey", requireAuth, async (c) => {
   return c.json({ listing: result.rows[0] });
 });
 
+// --- F10-spike: klassifikations-drilldown. Konklusion (se FEATURES.md F10):
+// vi kan IKKE vise en pris-over-tid-tidsserie (hver annonce er en unik
+// engangsvare, ingen realiserede salgspriser observeres) - det eneste
+// meningsfulde er FORDELINGEN af udbudspriser bag classify_dynamic()'s
+// percentil-beregning i scraper/scraper/classify.py. Dette endpoint
+// replikerer den samme percentil-forespørgsel (samme model+gen,
+// lookback_days=180, min_samples=5) direkte mod Turso - option (a) fra
+// spiken, ingen precomputed/gemt kontekst pr. annonce (undgår duplikeret
+// lagring for noget der er billigt at genberegne ved læsning). ---
+const CONTEXT_LOOKBACK_DAYS = 180;
+const CONTEXT_MIN_SAMPLES = 5;
+
+function percentile(sorted: number[], pct: number): number | null {
+  if (sorted.length === 0) return null;
+  const k = (sorted.length - 1) * (pct / 100);
+  const f = Math.floor(k);
+  const cIdx = Math.min(f + 1, sorted.length - 1);
+  if (f === cIdx) return sorted[f];
+  return sorted[f] + (sorted[cIdx] - sorted[f]) * (k - f);
+}
+
+app.get("/api/listings/:itemKey/context", requireAuth, async (c) => {
+  const db = getDbClient(c.env);
+  const itemKey = c.req.param("itemKey");
+  if (!itemKey) {
+    return c.json({ error: "itemKey is required" }, 400);
+  }
+
+  const listingResult = await db.execute({
+    sql: "SELECT * FROM listings WHERE item_key = ?",
+    args: [itemKey],
+  });
+  const listing = listingResult.rows[0];
+  if (!listing) {
+    return c.json({ error: "not found" }, 404);
+  }
+
+  const cutoff = new Date(
+    Date.now() - CONTEXT_LOOKBACK_DAYS * 24 * 3600 * 1000,
+  ).toISOString();
+
+  const comparablesResult = await db.execute({
+    sql: `SELECT item_key, title, source, url, price_per_unit_dkk, first_seen
+          FROM listings
+          WHERE model = ? AND gen = ? AND price_per_unit_dkk IS NOT NULL
+          AND first_seen >= ? AND item_key != ?
+          ORDER BY price_per_unit_dkk ASC`,
+    args: [listing.model as string, listing.gen as string, cutoff, itemKey],
+  });
+  const comparables = comparablesResult.rows;
+  const prices = comparables
+    .map((r) => Number(r.price_per_unit_dkk))
+    .sort((a, b) => a - b);
+
+  const n = prices.length;
+  const usesDynamic = n >= CONTEXT_MIN_SAMPLES;
+
+  return c.json({
+    itemKey,
+    model: listing.model,
+    gen: listing.gen,
+    thisPriceDkk: listing.price_per_unit_dkk,
+    classification: listing.classification,
+    classificationMethod: listing.classification_method,
+    lookbackDays: CONTEXT_LOOKBACK_DAYS,
+    minSamples: CONTEXT_MIN_SAMPLES,
+    n,
+    method: usesDynamic
+      ? `dynamisk (n=${n})`
+      : `statisk (utilstrækkelig historik, n=${n} < ${CONTEXT_MIN_SAMPLES})`,
+    p25: usesDynamic ? percentile(prices, 25) : null,
+    p75: usesDynamic ? percentile(prices, 75) : null,
+    comparables,
+  });
+});
+
 export default app;

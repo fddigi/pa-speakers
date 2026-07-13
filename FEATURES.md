@@ -528,7 +528,25 @@ ikke har data til, og dermed vildleder brugeren til at tro et tal er en
 realiseret markedspris. Spiken mitigerer netop dette ved at fastlægge den
 ærlige framing før kode.
 
----
+**Spike-konklusion (afklaret 2026-07-13, byg-ja på tekst-panel, bygget):**
+
+- Bekræftet: kun "fordeling bag klassifikationen" er meningsfuld — ingen
+  ægte pris-over-tid, som forudset i researchen.
+- Byg tekst-panel, IKKE graf: badget i tabellen er nu klikbart og åbner et
+  letvægts-panel (ingen chart-bibliotek, ingen ny afhængighed) der viser
+  metode (`dynamisk (n=X)` / `statisk (utilstrækkelig historik)`), p25/p75,
+  denne annonces pris, og en liste over de sammenlignelige annoncer
+  (titel, kilde, pris, link) — plus den påkrævede ærlige caveat om
+  udbudspriser vs. realiserede salg.
+- Arkitektur: valgte (a), et nyt Worker-endpoint
+  `GET /api/listings/:itemKey/context` der replikerer
+  `classify_dynamic()`'s percentil-forespørgsel (samme `lookback_days=180`,
+  `min_samples=5`) direkte mod Turso — ingen precomputed/gemt kontekst pr.
+  annonce, undgår duplikeret lagring for noget der er billigt at
+  genberegne ved læsning. `classify.py` selv rørt ikke (kun læst som
+  reference for at holde tallene i sync).
+- Berørte filer: `worker/src/index.ts` (nyt endpoint), `frontend/index.html`
+  (klikbart badge, `context-panel`-overlay).
 
 ## F11: Spike: flere kilder (Gearloop, Thomann nypris-reference, Facebook)
 

@@ -11,27 +11,16 @@
 ## Prioriteret rækkefølge (næste øverst)
 
 ```
-1. F10  Spike: prishistorik-drilldown WSJF 4.0 TODO
-2. F5   Prisfalds-detektion          WSJF 3.0  TODO
-3. F4   eBay.de som kilde            WSJF 1.9  TODO
-4. F9   Kategorisering af søgninger  WSJF 1.4  TODO
+1. F5   Prisfalds-detektion          WSJF 3.0  TODO
+2. F4   eBay.de som kilde            WSJF 1.9  TODO
+3. F9   Kategorisering af søgninger  WSJF 1.4  TODO
 ```
 
-F6, F8, F7 og F11 er leveret — se "Leveret" nedenfor.
+F6, F8, F7, F11 og F10 er leveret — se "Leveret" nedenfor.
 
 ## Scoring-detaljer
 
 ```
-F10 Spike: prishistorik / klassifikations-drilldown
-    BV 3  TC 2  RR 3  CoD 8  Size 2  WSJF 4.0
-    Spike. Kernefund: ingen ægte "pris over tid" mulig -- hver
-    annonce er unik engangsvare, vi observerer aldrig realiserede
-    salgspriser. Det eneste med tidsdimension er FORDELINGEN bag
-    percentil-klassifikationen (som classify_dynamic allerede
-    beregner). Drilldown = histogram + p25/p75 + denne-markør +
-    comparables, ikke en SKU-tidsserie. Lav BV: forklarende polish,
-    finder ingen nye kup. Spiken skal afgøre graf vs. tekst-tooltip.
-
 F5  Prisfalds-detektion
     BV 6  TC 5  RR 4  CoD 15  Size 5  WSJF 3.0
 
@@ -91,6 +80,9 @@ F9  Kategorisering af søgninger
 2026-07-13  F11: Spike flere kilder -- Gearloop bygget, Thomann
             nypris-reference bygget (kun 910A kortlagt), Facebook
             bevidst udelukket (se FEATURES.md F11)
+2026-07-13  F10: Spike prishistorik -- ingen ægte tidsserie mulig,
+            byg klikbart klassifikations-drilldown-panel (tekst,
+            ikke graf), GET /api/listings/:itemKey/context
 ```
 
 Se git-historik/tidligere samtale for fulde detaljer pr. leverance.

@@ -250,6 +250,17 @@
       padding: 14px 16px;
     }
     .controls input[type=text] { min-width: 220px; flex: 1; }
+    /* F13: "skjul solgte"-toggle - matcher controls-baren's øvrige elementer. */
+    .stale-toggle {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.85rem; color: var(--text-muted); white-space: nowrap;
+    }
+    /* F13: info-ikon m. native title-tooltip (laveste/gennemsnit for modellen) -
+       bevidst IKKE en custom tooltip-komponent, browserens egen title er nok. */
+    .price-stats-icon {
+      cursor: help; margin-left: 6px; color: var(--text-muted);
+      font-size: 0.9em;
+    }
 
     /* Table */
     .table-scroll {
@@ -483,6 +494,10 @@
           <option value="first_seen:desc">Først set (nyeste)</option>
           <option value="model:asc">Model</option>
         </select>
+        <label class="stale-toggle">
+          <input type="checkbox" id="show-stale-toggle" />
+          Vis også ikke-aktive
+        </label>
         <button id="reload">Genindlæs</button>
       </div>
 
@@ -547,7 +562,49 @@
     let allListings = [];
     let activeClassFilter = null; // classification chip filter (client-side, no refetch)
     let activeCategoryFilter = null; // F9: category dropdown filter (client-side, no refetch)
-    let sortKey = null, sortAsc = true; // null = default combined sort (classification, then newest)
+    // Default: laveste pris/enhed først (ændret fra klassifikation+nyeste efter ønske).
+    let sortKey = "price_per_unit_dkk", sortAsc = true;
+
+    // F13 (2026-07-22): "skjul solgte annoncer" - en annonce der ikke er
+    // genberørt (last_seen) i mere end denne grænse anses for sandsynligvis
+    // solgt/nedtaget. 48 timer er bevidst RUNDHÅNDET: Kleinanzeigen/Blocket
+    // har en 4-timers min-interval (F7), så en helt normal, stadig-aktiv
+    // annonce derfra kan legitimt gå flere timer uden at blive genberørt -
+    // 48t giver god margin mod falsk skjulning selv hvis en planlagt kørsel
+    // springes over. showStale=false som standard, men ALDRIG en dataSLETNING
+    // - kun et render-filter, se computeModelStats() som bevidst bruger det
+    // UFILTREREDE allListings (så prishistorik ikke mister "solgte" datapunkter).
+    const STALE_HOURS = 48;
+    let showStale = false;
+    let modelStats = new Map(); // "model|gen" -> {min, avg, n}, se computeModelStats()
+    const MODEL_STATS_LOOKBACK_DAYS = 180; // samme vindue som F10-drilldownen
+
+    function isStale(row) {
+      if (!row.last_seen) return false; // ingen data endnu (fx foer F13-migrering naaede raekken) - vis den
+      return Date.now() - new Date(row.last_seen).getTime() > STALE_HOURS * 3600 * 1000;
+    }
+
+    // F13: laveste + gennemsnitlige udbudspris pr. (model, gen) - beregnet fra
+    // den FULDE, ufiltrerede annonceliste (inkl. sandsynligvis solgte), saa
+    // tallene afspejler hele markedet man har observeret, ikke kun det der
+    // lige nu er synligt i tabellen.
+    function computeModelStats() {
+      const cutoff = Date.now() - MODEL_STATS_LOOKBACK_DAYS * 24 * 3600 * 1000;
+      const groups = new Map();
+      for (const row of allListings) {
+        if (!row.model || row.price_per_unit_dkk == null) continue;
+        if (new Date(row.first_seen ?? 0).getTime() < cutoff) continue;
+        const key = `${row.model}|${row.gen ?? "uoplyst"}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(row.price_per_unit_dkk);
+      }
+      const stats = new Map();
+      for (const [key, prices] of groups) {
+        const sum = prices.reduce((a, b) => a + b, 0);
+        stats.set(key, { min: Math.min(...prices), avg: sum / prices.length, n: prices.length });
+      }
+      return stats;
+    }
 
     function authHeaders() {
       const token = localStorage.getItem("session_token");
@@ -588,6 +645,7 @@
       }
       const { listings } = await res.json();
       allListings = listings;
+      modelStats = computeModelStats(); // F13: pr.-model-stats, se funktionens docstring
       applySort();
       renderStats();
       renderCategoryFilter();
@@ -805,13 +863,19 @@
       const tbody = document.querySelector("#listings-table tbody");
       tbody.innerHTML = "";
 
+      const staleHidden = showStale ? 0 : allListings.filter(isStale).length;
       const filtered = allListings.filter((row) => {
+        if (!showStale && isStale(row)) return false;
         if (activeClassFilter && (row.classification ?? "UKENDT") !== activeClassFilter) return false;
         if (activeCategoryFilter && (row.category ?? "PA-højttalere") !== activeCategoryFilter) return false;
         if (!search) return true;
         const haystack = `${row.title ?? ""} ${row.model ?? ""}`.toLowerCase();
         return haystack.includes(search);
       });
+
+      const countSuffix = staleHidden > 0
+        ? ` (${staleHidden} sandsynligvis solgt${staleHidden === 1 ? "" : "e"} skjult)`
+        : "";
 
       if (filtered.length === 0) {
         const tr = document.createElement("tr");
@@ -821,7 +885,8 @@
         td.textContent = allListings.length === 0 ? "Ingen annoncer endnu." : "Ingen annoncer matcher filteret.";
         tr.appendChild(td);
         tbody.appendChild(tr);
-        document.getElementById("count-line").textContent = `${filtered.length} af ${allListings.length} annoncer vist`;
+        document.getElementById("count-line").textContent =
+          `${filtered.length} af ${allListings.length} annoncer vist${countSuffix}`;
         return;
       }
 
@@ -870,6 +935,20 @@
           dropBadge.textContent = ` ↓ ${Math.abs(row.latest_price_drop_pct)}% (${daysText})`;
           priceCell.appendChild(dropBadge);
         }
+        // F13: laveste/gennemsnit for DENNE models (model, gen)-population -
+        // native title-attribut, ingen custom tooltip-kode.
+        if (row.model) {
+          const stat = modelStats.get(`${row.model}|${row.gen ?? "uoplyst"}`);
+          if (stat) {
+            const icon = document.createElement("span");
+            icon.className = "price-stats-icon";
+            icon.textContent = "ⓘ";
+            icon.title =
+              `Laveste set: ${Math.round(stat.min)} kr · Gennemsnit: ${Math.round(stat.avg)} kr ` +
+              `(n=${stat.n}, ${MODEL_STATS_LOOKBACK_DAYS} dage)`;
+            priceCell.appendChild(icon);
+          }
+        }
         tr.appendChild(priceCell);
 
         const kildeCell = document.createElement("td");
@@ -900,7 +979,8 @@
         tbody.appendChild(tr);
       }
 
-      document.getElementById("count-line").textContent = `${filtered.length} af ${allListings.length} annoncer vist`;
+      document.getElementById("count-line").textContent =
+        `${filtered.length} af ${allListings.length} annoncer vist${countSuffix}`;
     }
 
     document.querySelectorAll("#listings-table th[data-key]").forEach((th) => {
@@ -915,6 +995,13 @@
 
     document.getElementById("filter-search").addEventListener("input", renderTable);
     document.getElementById("reload").addEventListener("click", loadListings);
+
+    // F13: "vis ogsaa ikke-aktive" - rent render-filter, rører aldrig
+    // allListings/modelStats (prishistorik skal blive ved med at inkludere dem).
+    document.getElementById("show-stale-toggle").addEventListener("change", (event) => {
+      showStale = event.target.checked;
+      renderTable();
+    });
 
     // F9: kategori-filter - kun synlig naar renderCategoryFilter() finder mere
     // end én kategori i brug.

@@ -1,8 +1,19 @@
-"""Reverb: officielt API (api.reverb.com), foretraekkes frem for scraping. Haandterer paginering."""
+"""Reverb: officielt API (api.reverb.com), foretraekkes frem for scraping. Haandterer paginering.
+
+F14 (2026-07-22): bruger curl_cffi i stedet for `requests` -- Reverb begyndte at
+svare 403 Forbidden paa ALLE forespoergsler fra `requests`, ogsaa med identiske
+headers til dem der virker fint via curl. Bekraeftet TLS/klient-fingerprint-
+baseret blokering (ikke header-baseret): curl med praecis samme headers -> 200,
+Pythons `requests` -> 403, uanset hvilke headers der proeves. `impersonate=`
+faar curl_cffi til at efterligne en rigtig Chrome-browsers TLS-haandtryk, hvilket
+loeser det. curl_cffi's `requests`-modul er bevidst API-kompatibelt med det
+rigtige `requests`-bibliotek (Session/.get()/.raise_for_status()), saa resten af
+denne fil er uaendret bortset fra importen og `impersonate=`-parameteren.
+"""
 import logging
 import time
 
-import requests
+from curl_cffi import requests
 
 logger = logging.getLogger("pa_monitor.reverb")
 
@@ -11,6 +22,7 @@ ACCEPT_VERSION = "3.0"
 TIMEOUT_S = 15
 MAX_PAGES_PER_TERM = 5
 REQUEST_DELAY_S = 1.0
+IMPERSONATE = "chrome"
 
 
 def _headers() -> dict:
@@ -30,6 +42,7 @@ def _fetch_page(session: requests.Session, query: str, page: int, condition: str
         params=params,
         headers=_headers(),
         timeout=TIMEOUT_S,
+        impersonate=IMPERSONATE,
     )
     resp.raise_for_status()
     return resp.json()
@@ -119,7 +132,7 @@ def fetch(config: dict, dry_run: bool = False) -> list[dict]:
                     page += 1
                     time.sleep(REQUEST_DELAY_S)
 
-            except requests.RequestException:
+            except requests.exceptions.RequestException:
                 logger.exception(
                     "Reverb: fejl ved soegning efter '%s', springer denne soegning over", term
                 )

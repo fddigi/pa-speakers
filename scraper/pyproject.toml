@@ -10,6 +10,12 @@ requires-python = ">=3.11"
 dependencies = [
     "scraper-core>=0.1.0",
     "requests>=2.31",
+    # F14 (2026-07-22): Reverb begyndte at afvise almindelig `requests`-trafik
+    # med 403 -- bekræftet TLS/klient-fingerprint-baseret (identiske headers
+    # giver 200 via curl, 403 via requests), ikke noget der kan rettes med
+    # header-ændringer. curl_cffi efterligner en rigtig browsers TLS-håndtryk
+    # og løser det. Se sources/reverb.py.
+    "curl_cffi>=0.7",
     "beautifulsoup4>=4.12",
     "playwright>=1.44",
     "pyyaml>=6.0",

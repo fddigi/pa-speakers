@@ -751,3 +751,100 @@ det.
   resten af model→URL-mapningen enkeltvis, lav risiko/indsats. (2) Gearloop
   — ingen videre kodearbejde nødvendigt, men genbesøg volumen om nogle
   måneder. (3) Facebook — forfølg ikke.
+
+---
+
+## F12: Model-genkendelse + tærskler for "Studio sub"-kategorien
+
+**Problem:** Brugeren oprettede en ny kategori "Studio sub" (Genelec 7050B,
+Genelec 7050C, Dynaudio 9S) via ønskeseddel-UI'et 2026-07-14 og fik ingen
+brugbare hits — oplevet som "ingen matches". Dette er PRÆCIS den grænse F9's
+"Ærlig vurdering" advarede om: v1 leverer kun kategori-TAGGING, ikke
+model-genkendelse for noget udenfor RCF ART/Yamaha DXR. `extract_model()`
+kendte intet Genelec/Dynaudio/SVS-mønster, så enhver ramt annonce blev
+`model=None` → `UKENDT`, umulig at skelne fra reel støj.
+
+**Verificeret direkte mod produktions-Turso:** scraperen havde rent faktisk
+allerede fundet 7 rå hits for de 3 oprettede termer (Reverb + DBA), alle
+`UKENDT`. Blandt dem: to ægte hits (en 7050C, en 7050B-i-bundle), men også
+tydelig falsk-positiv-støj fra kildernes egen fuzzy-søgning — en "Dynaudio BM9S
+Owners Manual" (papirmanual, ikke selve subben), en "Dynaudio Audience 9"
+(helt andet produkt) og en "Genelec 8250A" (GLM-referencemonitor, ikke en
+sub) — alle uklassificerbare og visuelt umulige at skelne fra de rigtige
+hits i UKENDT-bunken. Kilde-kadencen (F7, 4t min-interval) betød desuden at
+Kleinanzeigen/Blocket slet ikke havde nået at søge de nye termer endnu.
+
+**Design (bevidst afgrænset til de 6 konkrete mål, IKKE en åben taksonomi —
+se F9's advarsel om at (b) ellers er en langt større epic):**
+- `normalize.py`: 9 nye `MODEL_PATTERNS`-nøgler
+  (`genelec_7050c/7050b/7050_unknown/7040a/7350a`,
+  `dynaudio_9s/bm9s`, `svs_sb1000_pro/nonpro`). Rækkefølgen i listen ER
+  disambigueringsmekanismen — specifikke mønstre (bogstav/"pro"/"bm"-præfiks)
+  står FØR de generiske fallback-mønstre, fordi `extract_model()` returnerer
+  første match.
+  - `dynaudio_bm9s` tjekkes FØR `dynaudio_9s` (BM9S er forgængeren, må
+    aldrig matches som 9S).
+  - `svs_sb1000_pro` tjekkes FØR `svs_sb1000_nonpro`.
+  - `genelec_7050c`/`genelec_7050b` tjekkes FØR det bogstavløse
+    `genelec_7050_unknown`-fallback.
+  - `\b9\s*-?\s*s\b` (dynaudio_9s) kræver en reel ordgrænse foran "9", hvilket
+    automatisk udelukker "18S"/"Audience 9" — ingen ekstra specialregel
+    nødvendig, kun korrekt regex-forankring.
+- `normalize.py`: `manual`/`guide`/`instructions`/`brugsanvisning`/
+  `bedienungsanleitung`/`handbog` tilføjet til det eksisterende
+  `ACCESSORY_OR_RENTAL_PATTERN` — fjerner præcis den falske BM9S-manual-støj
+  fundet i produktion.
+- `classify.py`: nyt `STUDIO_SUB_MODELS`-sæt (i `normalize.py`, importeret).
+  Studio-subs sælges ENKELTVIS (modsat RCF ART-par), så `classify()` bruger
+  `price_per_unit_dkk` direkte for disse modeller — ingen
+  `SINGLE_UNIT_PENALTY`/par-halvering, som ellers ville forvrænge tærsklerne.
+  Ny `studio_sub_thresholds`-parameter tilføjet til `classify()` og
+  `classify_dynamic()` (bagudkompatibelt: default `None`/valgfrit sidste
+  argument, RCF-kaldene er uændrede).
+  - `dynaudio_bm9s`: halverede tærskler ift. `dynaudio_9s` (forgænger,
+    markant mindre værd).
+  - `svs_sb1000_nonpro`: lavere tærskler end `svs_sb1000_pro` (ingen
+    app-PEQ/variabel crossover).
+  - `genelec_7050_unknown`: konservativt sat til B's (laveste) tærskler
+    indtil revisionen er bekræftet med sælger.
+  - `STUDIO_SUB_NOTES`: statisk note pr. tvetydig model, føjet til
+    `classification_method` — vist i F10's klassifikations-drilldown-panel
+    (samme felt der allerede viser "dynamisk (n=X)"/"statisk (...)").
+- `config.yaml`: ny `studio_sub_thresholds`-sektion (enkeltenheds-priser,
+  IKKE par-priser som `thresholds`).
+- `pairs.py` (F6): ingen ændring nødvendig — `_threshold_key()` kender kun
+  RCF-modeller, så studio-subs falder automatisk udenfor "blandet
+  par"-logikken (den giver ikke mening for enkeltvis-solgte subs).
+- Turso `search_terms`: tilføjede de 3 manglende mål fra brugerens 6-model-
+  liste (SVS SB-1000 Pro, Genelec 7040A, Genelec 7350A) med samme kategori
+  ("Studio sub") som brugeren selv oprettede.
+
+**Eksplicit UDE af scope:** ingen ny "campaign"/notify()-lagdeling, ingen
+prioritets-kø (P0/P1/P2) og intet `has_grille`-flag — dette projekt har
+INTET push-notifikations-lag i dag (kun webapp-visning), så den del af den
+oprindelige forespørgsel blev bevidst ikke bygget. `?category=`-filteret
+(F9) og klassifikations-badget dækker samme behov med eksisterende UI.
+
+**Berørte filer:** `scraper/scraper/normalize.py`, `scraper/scraper/classify.py`,
+`scraper/scraper/pipeline.py` (videresender `studio_sub_thresholds`),
+`config.yaml`, `scraper/tests/test_studio_subs.py` (nyt), `Makefile`
+(test-target udvidet til `scraper/tests`).
+
+**Acceptkriterier:**
+- De 6 mål-modeller (Genelec 7050B/C/7040A/7350A, Dynaudio 9S,
+  SVS SB-1000/Pro) får korrekt `model` sat og en reel GODT KØB/FAIR/
+  OVERPRISET-klassifikation, ikke UKENDT.
+- BM9S, SB-1000-uden-Pro og bogstavløs "7050" matcher deres egen model-nøgle
+  med egne (lavere/konservative) tærskler — aldrig den "store" variants.
+- Kendte forvekslingsrisici fra produktionsdata (BM9S-manualer,
+  "Dynaudio Audience 9", "Genelec 8250A", "Dynaudio ... 18S") matcher IKKE
+  et studio-sub-mønster.
+- RCF ART/Yamaha DXR-klassifikation er fuldstændig uændret (ny kode er
+  additiv, kun aktiv for de nye model-nøgler).
+- `scraper/tests/test_studio_subs.py` består (26 assertions).
+
+**Risici:** Lav — additiv ændring, ingen eksisterende model-nøgler eller
+tærskler rørt. Største risiko er FREMTIDIGE forvekslinger efterhånden som
+flere studio-sub-annoncer dukker op (regex-mønstrene er kun så gode som de
+titel-varianter de er testet mod); ny støj bør rettes samme sted
+(`normalize.py`/`ACCESSORY_OR_RENTAL_PATTERN`) fremfor at blive luget manuelt.

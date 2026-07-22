@@ -68,6 +68,12 @@ INAKTIV indtil brugeren selv sætter EBAY_APP_ID/EBAY_CERT_ID (se README.md).
             tagging) -- category-kolonne tilføjet til listings +
             search_terms via additiv migrering, term_category_map,
             kategori-gruppering i ønskeseddel-UI, ?category=-filter
+2026-07-14  F12: Studio sub-kategori fik ægte model-genkendelse +
+            tærskler (Genelec 7050B/C/7040A/7350A, Dynaudio 9S,
+            SVS SB-1000/Pro) -- rettede F9's dokumenterede
+            "alt bliver UKENDT"-grænse for denne konkrete kategori.
+            BM9S/non-Pro/ukendt-revision disambiguering + manual-
+            støj filtreret fra (fundet direkte i produktionsdata)
 ```
 
 Se git-historik/tidligere samtale for fulde detaljer pr. leverance.

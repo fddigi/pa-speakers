@@ -20,7 +20,73 @@ MODEL_PATTERNS = [
     ("dxr10", re.compile(r"\bdxr\s*-?\s*10(?!\d)", re.I)),
     ("dxr12", re.compile(r"\bdxr\s*-?\s*12(?!\d)", re.I)),
     ("dxr15", re.compile(r"\bdxr\s*-?\s*15(?!\d)", re.I)),
+
+    # Studio-subs (kategori "Studio sub", tilfoejet 2026-07-14). Raekkefoelgen
+    # er bevidst: mere specifikke moenstre (bogstav/"pro"/"bm"-praefiks) STAAR
+    # FOER de generiske fallback-moenstre, fordi extract_model() returnerer
+    # foerste match i listen -- det er selve disambiguerings-mekanismen, ikke
+    # kun negative lookaheads.
+    #
+    # Dynaudio BM9S er FORGAENGEREN til 9S og markant mindre vaerd -- skal
+    # ALDRIG matches som "dynaudio_9s". Tjekkes foerst.
+    ("dynaudio_bm9s", re.compile(r"\bbm\s*-?\s*9\s*-?\s*s\b(?:\s*ii)?", re.I)),
+    # Kraever "dynaudio" et sted i teksten (indenfor ~25 tegn) saa vi ikke
+    # fanger uraelaterede "9s"-forekomster -- \b9 kraever desuden en reel
+    # ord-graense foer "9", saa "18S"/"29S" osv. IKKE matcher.
+    ("dynaudio_9s", re.compile(r"\bdynaudio\b.{0,25}?\b9\s*-?\s*s\b", re.I | re.S)),
+
+    # SVS SB-1000 uden "pro" er den aeldre model (ingen app-PEQ/variabel
+    # crossover) -- markant anderledes vaerdi. "pro"-varianten tjekkes foerst.
+    ("svs_sb1000_pro", re.compile(r"\bsb-?\s*1000\s*pro\b", re.I)),
+    ("svs_sb1000_nonpro", re.compile(r"\bsb-?\s*1000\b(?!\s*pro)", re.I)),
+
+    # Genelec 7050: B og C har vidt forskellig vaerdi/integration. Bogstav-
+    # varianterne tjekkes FOER det bogstavloese fallback-moenster nedenfor.
+    ("genelec_7050c", re.compile(r"\b7050\s*-?\s*c(?!\d)", re.I)),
+    ("genelec_7050b", re.compile(r"\b7050\s*-?\s*b(?!\d)", re.I)),
+    ("genelec_7040a", re.compile(r"\b7040\s*-?\s*a?(?!\d)", re.I)),
+    # 7350A og 7350APM er samme enhed (blot anden emballering/bundle) -- ingen
+    # saerregel noedvendig, begge matcher denne ene noegle.
+    ("genelec_7350a", re.compile(r"\b7350\s*-?\s*a(?:pm)?(?!\d)", re.I)),
+    # Bogstavloest "7050" (ingen B/C angivet) -- ukendt revision, vaesentligt
+    # anderledes vaerdi/integration. (?!\s*-?\s*[bc]) er en ekstra sikkerhed
+    # (raekkefoelgen ovenfor haandterer det allerede), i tilfaelde af at nogen
+    # senere flytter rundt paa listen.
+    ("genelec_7050_unknown", re.compile(r"\b7050(?!\s*-?\s*[bc])(?!\d)", re.I)),
+
+    # Udvidet søgefelt (2026-07-22, "Fase 4"-research): yderligere studio-sub-
+    # kandidater udenfor Genelec/Dynaudio/SVS. Alfanumeriske modelkoder er
+    # tilstraekkeligt specifikke i sig selv (fx "KC62", "KH 750") -- braendes
+    # ikke af generiske tal alene, saa intet krav om at maerkenavnet ("KEF",
+    # "Neumann") staar ved siden af.
+    ("kef_kc62", re.compile(r"\bkc\s*-?\s*62\b", re.I)),
+    # "S10.4" kraever KRK-kontekst naer sig -- rent talformat ("10.4") ville
+    # ellers vaere for uspecifikt (kunne matche maal/dimensioner i en titel).
+    ("krk_s10_4", re.compile(r"\bkrk\b.{0,25}?\bs\s*-?\s*10\.?4\b", re.I | re.S)),
+    ("adam_sub10", re.compile(r"\badam\b.{0,30}?\bsub\s*-?\s*10\b(?!\d)", re.I | re.S)),
+    ("neumann_kh750", re.compile(r"\bkh\s*-?\s*750\b", re.I)),
+    # TS107/TS108 tjekkes i denne raekkefoelge (108 foerst) for at undgaa at
+    # "108" delvist matcher et "107"-moenster eller omvendt -- reelt ingen
+    # overlap-risiko (praecise 3-cifrede koder), men eksplicit alligevel.
+    ("eve_ts108", re.compile(r"\bts\s*-?\s*108\b", re.I)),
+    ("eve_ts107", re.compile(r"\bts\s*-?\s*107\b", re.I)),
+    ("kali_ws12", re.compile(r"\bws\s*-?\s*12\b", re.I)),
+    # RCF SUB 702-AS (PA-arvet studio-sub-kandidat) -- II/MKII/MK3 daekkes af
+    # samme noegle, ingen kendt vaerdi-forskel mellem revisionerne (modsat
+    # Genelec/Dynaudio/SVS's disambiguerings-behov ovenfor).
+    ("rcf_sub702as", re.compile(r"\bsub\s*-?\s*702\s*-?\s*as\b", re.I)),
 ]
+
+# Modeller der saelges ENKELTVIS (studio-subs) -- ingen par-halveringslogik i
+# classify.py, i modsaetning til RCF ART-taerskler som er par-priser.
+STUDIO_SUB_MODELS = frozenset({
+    "dynaudio_9s", "dynaudio_bm9s",
+    "svs_sb1000_pro", "svs_sb1000_nonpro",
+    "genelec_7050c", "genelec_7050b", "genelec_7050_unknown",
+    "genelec_7040a", "genelec_7350a",
+    "kef_kc62", "krk_s10_4", "adam_sub10", "neumann_kh750",
+    "eve_ts108", "eve_ts107", "kali_ws12", "rcf_sub702as",
+})
 
 
 # Leading (?<![a-zA-Z]) i stedet for \b: modelnummer+generation skrives ofte helt
@@ -48,12 +114,20 @@ PER_UNIT_PRICE_PATTERN = re.compile(
 # Tilbehoer (cover/bracket/case/stand) og udlejning/soeges-annoncer er ikke salg af
 # hele hoejttalere -- ekskluderes foer normalisering. Daekker tysk (Kleinanzeigen),
 # svensk (Blocket), dansk og engelsk.
+#
+# manual/guide/brugsanvisning tilfoejet 2026-07-14: fundet i produktionsdata at
+# Reverbs soegning paa "Dynaudio 9S" ogsaa returnerede loese "BM9S Owners Manual"/
+# "BM9S Operating Guide"-annoncer (papirmanual, ikke selve hoejttaleren) -- disse
+# ville ellers rammes af dynaudio_bm9s-moenstret i normalize.py og fejlagtigt
+# klassificeres som en (billig, "godt koeb"-agtig) BM9S-subwoofer.
 ACCESSORY_OR_RENTAL_PATTERN = re.compile(
     r"\b("
     r"covers?|cvr|brackets?|h-br|halterung(?:en)?|st[aä]nder|abdeckung(?:en)?|schutzh[üu]llen?|"
     r"taschen?|cases?|flightcases?|bags?|v[äa]skor?|fodral|skydd|hoes(?:en)?|"
     r"vermietung|verleih|miete[nt]?|uthyrning|hyra|hyr\b|rental|for\s*rent|til\s*leje|"
-    r"s[øo]ges|sucht|gesucht|wanted|tausche"
+    r"s[øo]ges|sucht|gesucht|wanted|tausche|"
+    r"manuals?|owners?\s*manual|operating\s*guide|instructions?|"
+    r"brugsanvisning|bedienungsanleitung|handbog"
     r")\b",
     re.I,
 )

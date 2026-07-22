@@ -106,6 +106,13 @@ def _run_locked(settings: Settings, force_source: str | None = None) -> int:
                     add_column_if_missing(
                         turso, "listings", "category", "TEXT NOT NULL DEFAULT 'PA-højttalere'"
                     )
+                    # F13: additive migration for last_seen (see pipeline.py's
+                    # LAST_SEEN_COLUMN_DDL docstring) - same backfill reasoning,
+                    # applied here to the Turso copy of the table.
+                    add_column_if_missing(turso, "listings", "last_seen", "TEXT")
+                    turso.execute(
+                        "UPDATE listings SET last_seen = first_seen WHERE last_seen IS NULL"
+                    )
 
                     # Dynamic search terms ("ønskeseddel"): Turso is the source of
                     # truth when configured, editable from the webapp - see

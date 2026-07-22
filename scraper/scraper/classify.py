@@ -7,8 +7,23 @@ To metoder:
   datapunkter endnu (kold start)."""
 import datetime
 
+from .normalize import STUDIO_SUB_MODELS
+
 # Enkeltenheds-ulempe: halvér par-taerskler + 10% oveni
 SINGLE_UNIT_PENALTY = 1.10
+
+# Studio-subs (F9-udvidelse, 2026-07-14): note pr. model til classification_method,
+# vist i frontendens klassifikations-drilldown (F10) -- samme sted brugeren allerede
+# ser "dynamisk (n=X)"/"statisk (utilstraekkelig historik)".
+STUDIO_SUB_NOTES = {
+    "genelec_7050_unknown": (
+        "ukendt revision (B eller C?) - spørg sælger, værdien afhænger meget af revisionen"
+    ),
+    "dynaudio_bm9s": "BM9S er forgængeren til 9S, markant mindre værd - halverede tærskler",
+    "svs_sb1000_nonpro": (
+        "SB-1000 uden Pro - ingen app-PEQ/variabel crossover, lavere tærskler end Pro"
+    ),
+}
 
 
 def _threshold_key(model: str, gen: str) -> str | None:
@@ -31,7 +46,9 @@ def _threshold_key(model: str, gen: str) -> str | None:
     return None
 
 
-def classify(listing: dict, thresholds: dict, mk1_beater: dict) -> str:
+def classify(
+    listing: dict, thresholds: dict, mk1_beater: dict, studio_sub_thresholds: dict | None = None
+) -> str:
     """listing skal indeholde: model, gen, quantity, price_per_unit_dkk."""
     model = listing.get("model")
     gen = listing.get("gen", "uoplyst")
@@ -40,6 +57,22 @@ def classify(listing: dict, thresholds: dict, mk1_beater: dict) -> str:
 
     if model is None or price_per_unit is None:
         return "UKENDT"
+
+    # Studio-subs saelges ENKELTVIS (modsat RCF ART-par) -- config.yaml's
+    # studio_sub_thresholds er derfor allerede enkeltenheds-priser, ingen
+    # par-halvering/SINGLE_UNIT_PENALTY her (den er kun relevant for taerskler
+    # der oprindeligt er defineret som par-priser).
+    if model in STUDIO_SUB_MODELS:
+        t = (studio_sub_thresholds or {}).get(model)
+        if t is None:
+            return "UKENDT"
+        if price_per_unit <= t["godt_koeb_max"]:
+            return "GODT KØB"
+        if price_per_unit >= t["overpriced_min"]:
+            return "OVERPRISET"
+        if t["fair_min"] <= price_per_unit <= t["fair_max"]:
+            return "FAIR"
+        return "FAIR"
 
     # Par-pris til sammenligning med taerskler (som alle er par-priser)
     pair_price = price_per_unit * 2
@@ -93,6 +126,7 @@ def _percentile(sorted_values: list, pct: float) -> float:
 def classify_dynamic(
     listing: dict, conn, thresholds: dict, mk1_beater: dict,
     min_samples: int = 5, lookback_days: int = 180, exclude_id: str | None = None,
+    studio_sub_thresholds: dict | None = None,
 ) -> tuple[str, str]:
     """Klassificerer ud fra percentiler af historiske priser (samme model+generation)
     i seen.db, naar der er nok datapunkter -- ellers statisk taerskeltabel som fallback.
@@ -131,8 +165,11 @@ def classify_dynamic(
         ).fetchall()
     historical = sorted(r[0] for r in rows if r[0] is not None)
 
+    note_suffix = f" - {STUDIO_SUB_NOTES[model]}" if model in STUDIO_SUB_NOTES else ""
+
     if len(historical) < min_samples:
-        return classify(listing, thresholds, mk1_beater), "statisk (utilstraekkelig historik)"
+        classification = classify(listing, thresholds, mk1_beater, studio_sub_thresholds)
+        return classification, f"statisk (utilstraekkelig historik){note_suffix}"
 
     p25 = _percentile(historical, 25)
     p75 = _percentile(historical, 75)
@@ -143,10 +180,10 @@ def classify_dynamic(
     # ulighedstegn placerer den gaengse pris korrekt som FAIR, kun klart under/over
     # bliver GODT KØB/OVERPRISET.
     if price_per_unit < p25:
-        return "GODT KØB", f"dynamisk (n={len(historical)})"
+        return "GODT KØB", f"dynamisk (n={len(historical)}){note_suffix}"
     if price_per_unit > p75:
-        return "OVERPRISET", f"dynamisk (n={len(historical)})"
-    return "FAIR", f"dynamisk (n={len(historical)})"
+        return "OVERPRISET", f"dynamisk (n={len(historical)}){note_suffix}"
+    return "FAIR", f"dynamisk (n={len(historical)}){note_suffix}"
 
 
 def priority_rank(listing: dict, priority_order: list) -> int:

@@ -141,6 +141,118 @@ thresholds:
 mk1_beater:
   godt_koeb_max: 2500
 
+# F9-udvidelse (2026-07-14): kategorien "Studio sub" fik model-genkendelse i
+# normalize.py (MODEL_PATTERNS) og egne enkeltenheds-tærskler her -- se
+# FEATURES.md F9's "Ærlig vurdering" (interpretation b). I MODSÆTNING til
+# `thresholds` ovenfor er disse ENKELTENHEDS-priser, ikke par-priser: studio-
+# subs sælges typisk enkeltvis, så classify.py bruger price_per_unit_dkk
+# direkte uden SINGLE_UNIT_PENALTY/par-halvering.
+studio_sub_thresholds:
+  genelec_7050c:
+    godt_koeb_max: 4000
+    fair_min: 4000
+    fair_max: 5000
+    overpriced_min: 5500
+  # Bogstavløs "Genelec 7050" (sælger har ikke angivet B eller C) -- ukendt
+  # revision, vidt forskellig værdi/integration. Konservativt sat til B's
+  # (laveste) tærskler, indtil revisionen er afklaret med sælger -- se
+  # classify.py:STUDIO_SUB_NOTES.
+  genelec_7050_unknown:
+    godt_koeb_max: 2000
+    fair_min: 2000
+    fair_max: 2500
+    overpriced_min: 2500
+  genelec_7050b:
+    godt_koeb_max: 2000
+    fair_min: 2000
+    fair_max: 2500
+    overpriced_min: 2500
+  genelec_7040a:
+    godt_koeb_max: 2800
+    fair_min: 2800
+    fair_max: 3500
+    overpriced_min: 4000
+  genelec_7350a:
+    godt_koeb_max: 5000
+    fair_min: 5000
+    fair_max: 6500
+    overpriced_min: 7000
+  dynaudio_9s:
+    godt_koeb_max: 3500
+    fair_min: 3500
+    fair_max: 4500
+    overpriced_min: 5000
+  # BM9S er FORGÆNGEREN til 9S og markant mindre værd -- halverede tærskler
+  # (jf. classify.py:STUDIO_SUB_NOTES).
+  dynaudio_bm9s:
+    godt_koeb_max: 1750
+    fair_min: 1750
+    fair_max: 2250
+    overpriced_min: 2500
+  svs_sb1000_pro:
+    godt_koeb_max: 2800
+    fair_min: 2800
+    fair_max: 3500
+    overpriced_min: 4000
+  # Uden "Pro": ingen app-PEQ/variabel crossover -- lavere tærskler.
+  svs_sb1000_nonpro:
+    godt_koeb_max: 1800
+    fair_min: 1800
+    fair_max: 2300
+    overpriced_min: 2800
+
+  # Udvidet søgefelt (2026-07-22): resten af Fase 4-kandidaterne. Tærsklerne
+  # her er ESTIMERET ud fra nypris + typisk brugtmarked-nedskrivning (50-60%)
+  # -- IKKE bekræftet mod faktiske DK/DE-annoncer som de oprindelige 6 mål.
+  # Justér når de første reelle hits kommer ind.
+  kef_kc62:
+    godt_koeb_max: 4000
+    fair_min: 4000
+    fair_max: 5500
+    overpriced_min: 6500
+  krk_s10_4:
+    godt_koeb_max: 1200
+    fair_min: 1200
+    fair_max: 1800
+    overpriced_min: 2200
+  adam_sub10:
+    godt_koeb_max: 3500
+    fair_min: 3500
+    fair_max: 4800
+    overpriced_min: 5500
+  # Eneste kandidat med (potentiel) mikrofonbaseret rumkorrektion (MA1) --
+  # dyrere end brugerens oprindelige 6.000 kr-loft, bevidst medtaget som
+  # "stræk-køb" givet den adresserer rummode-fundet fra Fase 3 direkte.
+  neumann_kh750:
+    godt_koeb_max: 6000
+    fair_min: 6000
+    fair_max: 8000
+    overpriced_min: 9000
+  eve_ts107:
+    godt_koeb_max: 1500
+    fair_min: 1500
+    fair_max: 2200
+    overpriced_min: 2600
+  eve_ts108:
+    godt_koeb_max: 2200
+    fair_min: 2200
+    fair_max: 3200
+    overpriced_min: 3800
+  kali_ws12:
+    godt_koeb_max: 1800
+    fair_min: 1800
+    fair_max: 2600
+    overpriced_min: 3000
+  # RCF SUB 702-AS: PA-arvet kandidat, eksplicit ønsket. Nypris ~5.500-6.500
+  # DKK (MK3, Thomann US/UK) -- tærskler estimeret ud fra samme
+  # nedskrivningslogik som resten af denne sektion, IKKE fra brugerens egen
+  # 2-års erfaring med SUB 705-AS II (større model, anden prisklasse).
+  rcf_sub702as:
+    godt_koeb_max: 2500
+    fair_min: 2500
+    fair_max: 3500
+    overpriced_min: 4200
+
 # F6: "Blandet par"-alarm -- to billige singler af samme model+generation kan
 # tilsammen ramme par-prismålet (thresholds.<key>.godt_koeb_max), selvom ingen
 # enkelt annonce gør det alene. Se scraper/scraper/pairs.py.
@@ -172,7 +284,12 @@ playwright:
   # soegetermer, saa vi reelt kun hentede side 1 pr. term. Nu pr.-term + et separat
   # samlet loft som noedbremse.
   max_pages_per_term: 3
-  max_pages_total: 20
+  # Haevet fra 20 -> 50 (2026-07-22): "Studio sub"-kategoriens udvidelse bragte
+  # det samlede antal soegetermer op paa 27 (fra oprindeligt ~9) -- DBA og
+  # Gearloop naaede at loebe toer for budget FOER de naaede de nyeste 7-8
+  # modeller i listen, saa de reelt aldrig blev soegt. 50 giver rigelig margin
+  # til fortsat vaekst i soegefeltet uden at fjerne noedbremsen helt.
+  max_pages_total: 50
 
 # Genbruges af sources/thomann.py's egen separate sqlite3-forbindelse (B-Stock
 # lagerstatus-tabel) -- peger bevidst paa SAMME fil som .env's LOCAL_SQLITE_PATH

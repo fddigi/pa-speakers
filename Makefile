@@ -34,7 +34,7 @@ venv:
 	$(PYTHON_BIN) -m pip install -e "scraper[dev]"
 
 test:
-	$(PYTHON_BIN) -m pytest packages/scraper-core/tests -q
+	$(PYTHON_BIN) -m pytest packages/scraper-core/tests scraper/tests -q
 
 lint:
 	$(PYTHON_BIN) -m ruff check packages/scraper-core scraper

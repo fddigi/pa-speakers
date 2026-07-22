@@ -51,13 +51,25 @@ TURSO_SCHEMA = LOCAL_SCHEMA
 # schema_utils.py + this module's call to add_column_if_missing below/in main.py.
 CATEGORY_COLUMN_DDL = "TEXT NOT NULL DEFAULT 'PA-højttalere'"
 
+# F13 (2026-07-22): "skjul solgte annoncer" i frontend'en kræver at vide
+# hvornår en annonce SIDST blev set i en scrape, ikke kun hvornår den blev
+# fundet FØRSTE gang (first_seen). Uden dette kan en annonce der ikke laengere
+# ligger til salg ikke skelnes fra en der stadig gør - se pairs.py's
+# "'Aktiv' er svagt defineret ... se F5 (last_seen)"-kommentar, som forudsagde
+# netop dette behov. Nullable (ingen DEFAULT): backfildes eksplicit til
+# first_seen i run_source() nedenfor, saa eksisterende raekker ikke fremstaar
+# som strakst "forsvundet" foer de har faaet en chance for at blive genberoert.
+LAST_SEEN_COLUMN_DDL = "TEXT"
+
 _INSERT_SQL = """
 INSERT INTO listings (item_key, source, title, model, gen, quantity, price_dkk,
     landed_price_dkk, shipping_customs_dkk, origin_country, price_per_unit_dkk,
-    classification, classification_method, url, first_seen, raw_json, category)
+    classification, classification_method, url, first_seen, raw_json, category,
+    last_seen)
 VALUES (:item_key, :source, :title, :model, :gen, :quantity, :price_dkk,
     :landed_price_dkk, :shipping_customs_dkk, :origin_country, :price_per_unit_dkk,
-    :classification, :classification_method, :url, :first_seen, :raw_json, :category)
+    :classification, :classification_method, :url, :first_seen, :raw_json, :category,
+    :last_seen)
 ON CONFLICT(item_key) DO UPDATE SET
     title = excluded.title, model = excluded.model, gen = excluded.gen,
     quantity = excluded.quantity, price_dkk = excluded.price_dkk,
@@ -67,7 +79,8 @@ ON CONFLICT(item_key) DO UPDATE SET
     price_per_unit_dkk = excluded.price_per_unit_dkk,
     classification = excluded.classification,
     classification_method = excluded.classification_method,
-    url = excluded.url, raw_json = excluded.raw_json, category = excluded.category
+    url = excluded.url, raw_json = excluded.raw_json, category = excluded.category,
+    last_seen = excluded.last_seen
 """
 
 
@@ -114,6 +127,13 @@ def run_source(
     """
     store.executescript(LOCAL_SCHEMA)
     add_column_if_missing(store.connection, "listings", "category", CATEGORY_COLUMN_DDL)
+    add_column_if_missing(store.connection, "listings", "last_seen", LAST_SEEN_COLUMN_DDL)
+    # Engangs-backfill (idempotent - WHERE last_seen IS NULL er tomt efter foerste
+    # koersel): uden dette ville ALLE eksisterende raekker se "solgte" ud i
+    # frontend'en i det oejeblik last_seen-filtreringen ruller ud, indtil de
+    # naturligt genberoeres af en senere scrape.
+    store.connection.execute("UPDATE listings SET last_seen = first_seen WHERE last_seen IS NULL")
+    store.connection.commit()
     raw_count = 0
     changed = 0
     price_drop_events: list[dict] = []
@@ -174,6 +194,7 @@ def run_source(
                 classification, method = classify.classify_dynamic(
                     listing, store.connection, config["thresholds"], config["mk1_beater"],
                     exclude_id=item_key,
+                    studio_sub_thresholds=config.get("studio_sub_thresholds", {}),
                 )
 
             # F9 v1: kategorien for den SØGETERM der fandt denne annonce (ren
@@ -205,6 +226,7 @@ def run_source(
                 "first_seen": first_seen,
                 "raw_json": json.dumps(listing.get("raw", {}), default=str),
                 "category": category,
+                "last_seen": first_seen,
             }
 
             is_new_or_changed = store.upsert_if_changed(
@@ -223,12 +245,26 @@ def run_source(
                 # is excluded for the SAME reason as raw_json: it's derived from
                 # whichever search_term matched THIS pass, which is exactly as
                 # ambiguous/order-dependent for a multi-term-matching ad.
+                # last_seen (F13) er ekskluderet af samme grund som first_seen:
+                # den saettes til "nu" hver koersel og ville ellers goere HVER
+                # eneste allerede-kendte annonce "aendret" paa hver koersel.
                 hash_payload={
                     k: v for k, v in payload.items()
-                    if k not in ("first_seen", "raw_json", "category")
+                    if k not in ("first_seen", "raw_json", "category", "last_seen")
                 },
             )
             if not is_new_or_changed:
+                # F13: annoncen er uaendret, men er stadig FUNDET i denne koersel
+                # - det er selve signalet vi bruger til at afgoere om en annonce
+                # (formentlig) stadig er til salg. Uden denne touch ville en
+                # uaendret annonce aldrig faa opdateret last_seen efter foerste
+                # indsaettelse, og ville fremstaa som "solgt" efter blot én
+                # (helt normal) koersel uden aendringer.
+                store.connection.execute(
+                    "UPDATE listings SET last_seen = ? WHERE item_key = ?",
+                    (first_seen, item_key),
+                )
+                store.connection.commit()
                 continue
 
             store.connection.execute(_INSERT_SQL, payload)
